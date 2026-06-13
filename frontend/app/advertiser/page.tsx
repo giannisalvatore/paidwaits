@@ -67,9 +67,9 @@ export default function AdvertiserDashboard() {
       });
       setForm({ name: "", creative_text: "", target_url: "", bid_usd: "5", budget_usd: "50" });
       await load();
-      setMessage("Campagna lanciata.");
+      setMessage("Campaign launched.");
     } catch (error) {
-      setMessage(`Lancio fallito: ${error instanceof Error ? error.message : "errore"}`);
+      setMessage(`Launch failed: ${error instanceof Error ? error.message : "error"}`);
     } finally {
       setSubmitting(false);
     }
@@ -81,28 +81,28 @@ export default function AdvertiserDashboard() {
   }
 
   async function fundCampaign(id: number) {
-    const amount = window.prompt("Aggiungi budget ($, minimo 20):", "50");
+    const amount = window.prompt("Add budget ($, min 20):", "50");
     if (!amount) return;
     try {
       await api(`/campaigns/${id}/fund`, { method: "POST", body: JSON.stringify({ amount_usd: Number(amount) }) });
       await load();
     } catch {
-      setMessage("Ricarica fallita (minimo $20).");
+      setMessage("Top-up failed (min $20).");
     }
   }
 
-  if (!summary) return <main className="p-10 text-sm text-muted-foreground">Caricamento…</main>;
+  if (!summary) return <main className="p-10 text-sm text-muted-foreground">Loading…</main>;
 
-  const bid = Number(form.bid_usd) || 0;
+  const price = Number(form.bid_usd) || 0; // price per 1,000 Waits
   const budget = Number(form.budget_usd) || 0;
-  const estViews = bid > 0 ? Math.floor((budget / bid) * 1000) : 0;
+  const estWaits = price > 0 ? Math.floor((budget / price) * 1000) : 0;
 
   const stats = [
-    { label: "Campaigns", value: String(summary.campaigns), sub: "totali" },
-    { label: "Serving", value: String(summary.serving), sub: "attive ora" },
-    { label: "Views", value: summary.impressions.toLocaleString("en-US"), sub: "impression servite" },
-    { label: "Spend", value: usdFromMicros(summary.spend_micros), sub: "spesa totale" },
-    { label: "CTR", value: `${(summary.ctr * 100).toFixed(2)}%`, sub: `${summary.clicks} click` },
+    { label: "Campaigns", value: String(summary.campaigns), sub: "total" },
+    { label: "Serving", value: String(summary.serving), sub: "live now" },
+    { label: "Waits", value: summary.impressions.toLocaleString("en-US"), sub: "waits served" },
+    { label: "Spend", value: usdFromMicros(summary.spend_micros), sub: "total spend" },
+    { label: "CTR", value: `${(summary.ctr * 100).toFixed(2)}%`, sub: `${summary.clicks} clicks` },
   ];
 
   return (
@@ -129,7 +129,7 @@ export default function AdvertiserDashboard() {
       {/* Charts */}
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
         <AreaChart
-          label="Impressions"
+          label="Waits"
           data={summary.series.map((point) => ({ day: point.day, value: point.impressions }))}
           format={(value) => value.toLocaleString("en-US")}
         />
@@ -148,32 +148,33 @@ export default function AdvertiserDashboard() {
       {/* Create campaign block */}
       <div className="mt-8 overflow-hidden rounded-2xl border bg-card">
         <div className="border-b px-6 py-5">
-          <h2 className="text-lg font-semibold tracking-tight">Lancia una campagna</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Launch a campaign</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Asta continua: ogni impression va a una campagna live con probabilità proporzionale al bid. Paghi il
-            bid ÷ 1.000 per impression, {usdFromMicros((bid * CLICK_MULT * 1_000_000) / 1000) || "$0.00"} per click.
-            Il budget che fissi è il pagamento.
+            A <strong>Wait</strong> = your ad shown once while Claude is thinking. You set a price per
+            1,000 Waits — <strong>the more you pay, the more often your ad shows</strong>. Your budget is the
+            payment: you&apos;re charged your price ÷ 1,000 per Wait and{" "}
+            {usdFromMicros((price * CLICK_MULT * 1_000_000) / 1000) || "$0.00"} per click.
           </p>
         </div>
         <form onSubmit={launch} className="grid gap-5 p-6 lg:grid-cols-[1fr_300px]">
           <div className="flex flex-col gap-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="text-sm font-medium">
-                Nome
+                Name
                 <input required maxLength={100} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ramp" className={`${inputClass} mt-1.5`} />
               </label>
               <label className="text-sm font-medium">
-                URL destinazione (https)
+                Destination URL (https)
                 <input required type="url" value={form.target_url} onChange={(e) => setForm({ ...form, target_url: e.target.value })} placeholder="https://ramp.com" className={`${inputClass} mt-1.5 font-mono`} />
               </label>
             </div>
             <label className="text-sm font-medium">
-              Ad line <span className="text-muted-foreground">· max 200 char</span>
+              Ad line <span className="text-muted-foreground">· max 200 chars</span>
               <input required maxLength={200} value={form.creative_text} onChange={(e) => setForm({ ...form, creative_text: e.target.value })} placeholder="The corporate card that closes your books 8 days faster." className={`${inputClass} mt-1.5`} />
             </label>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="text-sm font-medium">
-                Bid (CPM) <span className="text-muted-foreground">· min $1</span>
+                Price per 1,000 Waits <span className="text-muted-foreground">· min $1 · more = shown more</span>
                 <input required type="number" min={1} step="0.5" value={form.bid_usd} onChange={(e) => setForm({ ...form, bid_usd: e.target.value })} className={`${inputClass} mt-1.5 tabular-nums`} />
               </label>
               <label className="text-sm font-medium">
@@ -186,21 +187,21 @@ export default function AdvertiserDashboard() {
           {/* Summary panel */}
           <div className="flex flex-col gap-4 rounded-xl border bg-background/50 p-5">
             <div>
-              <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Pagamento</p>
+              <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Payment</p>
               <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight">{usdFromMicros(budget * 1_000_000)}</p>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <p className="tabular-nums">{estViews.toLocaleString("en-US")}</p>
-                <p className="text-[11px] text-muted-foreground">impression stimate</p>
+                <p className="tabular-nums">{estWaits.toLocaleString("en-US")}</p>
+                <p className="text-[11px] text-muted-foreground">estimated Waits</p>
               </div>
               <div>
-                <p className="tabular-nums">{usdFromMicros(bid * 1_000_000)}</p>
-                <p className="text-[11px] text-muted-foreground">bid CPM</p>
+                <p className="tabular-nums">{usdFromMicros(price * 1_000_000)}</p>
+                <p className="text-[11px] text-muted-foreground">price / 1,000 Waits</p>
               </div>
             </div>
             <Button type="submit" size="lg" disabled={submitting} className="mt-auto w-full font-semibold">
-              {submitting ? "Lancio…" : `Lancia — paga ${usdFromMicros(budget * 1_000_000)}`}
+              {submitting ? "Launching…" : `Launch — pay ${usdFromMicros(budget * 1_000_000)}`}
             </Button>
             {message && <p className="text-xs">{message}</p>}
           </div>
@@ -208,18 +209,18 @@ export default function AdvertiserDashboard() {
       </div>
 
       {/* Campaigns table */}
-      <h2 className="mt-10 text-lg font-semibold tracking-tight">Campagne</h2>
+      <h2 className="mt-10 text-lg font-semibold tracking-tight">Campaigns</h2>
       <div className="mt-3 overflow-x-auto rounded-xl border bg-card">
         <Table className="min-w-[760px]">
           <TableHeader>
             <TableRow>
-              <TableHead>Campagna</TableHead>
-              <TableHead>Bid (CPM)</TableHead>
-              <TableHead>Stato</TableHead>
-              <TableHead className="text-right">Impression</TableHead>
-              <TableHead className="text-right">Click</TableHead>
-              <TableHead className="text-right">Spesa</TableHead>
-              <TableHead className="text-right">Residuo</TableHead>
+              <TableHead>Campaign</TableHead>
+              <TableHead>Price / 1k Waits</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Waits</TableHead>
+              <TableHead className="text-right">Clicks</TableHead>
+              <TableHead className="text-right">Spend</TableHead>
+              <TableHead className="text-right">Remaining</TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -245,7 +246,7 @@ export default function AdvertiserDashboard() {
                 </TableCell>
                 <TableCell>
                   <Badge variant={campaign.status === "live" && campaign.remaining_micros > 0 ? "default" : "secondary"}>
-                    {campaign.remaining_micros <= 0 ? "esaurita" : campaign.status}
+                    {campaign.remaining_micros <= 0 ? "out of budget" : campaign.status}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right tabular-nums">{campaign.impressions.toLocaleString("en-US")}</TableCell>
@@ -260,7 +261,7 @@ export default function AdvertiserDashboard() {
                       size="sm"
                       onClick={() => patchCampaign(campaign.id, { status: campaign.status === "live" ? "paused" : "live" })}
                     >
-                      {campaign.status === "live" ? "Pausa" : "Avvia"}
+                      {campaign.status === "live" ? "Pause" : "Resume"}
                     </Button>
                   </div>
                 </TableCell>
@@ -269,7 +270,7 @@ export default function AdvertiserDashboard() {
             {campaigns.length === 0 && (
               <TableRow>
                 <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
-                  Nessuna campagna. Lanciane una qui sopra.
+                  No campaigns yet. Launch one above.
                 </TableCell>
               </TableRow>
             )}

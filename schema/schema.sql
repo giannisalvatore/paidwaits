@@ -116,3 +116,35 @@ CREATE TABLE IF NOT EXISTS payouts (
   KEY idx_payouts_user (user_id),
   CONSTRAINT fk_payouts_user FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Flag di piattaforma (key/value): killswitch globale, versione ToS, ecc.
+-- Killswitch: flag_key='killswitch', flag_value JSON {"killed":bool,"reason":"...","scope":"all"}.
+-- Si attiva via questa tabella (admin/DB) o via env KILLSWITCH=true (emergenza).
+CREATE TABLE IF NOT EXISTS platform_flags (
+  flag_key    VARCHAR(64) PRIMARY KEY,
+  flag_value  TEXT,
+  updated_at  BIGINT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Dedup degli eventi billabili (idempotenza): ogni impression/click porta un
+-- event_uuid generato dal client. La PK impedisce di contare due volte lo stesso
+-- evento (retry/doppio invio). INSERT vince una sola volta.
+CREATE TABLE IF NOT EXISTS billing_events (
+  event_uuid  CHAR(36) PRIMARY KEY,
+  kind        ENUM('impression','click') NOT NULL,
+  user_id     BIGINT UNSIGNED NOT NULL,
+  ref_id      VARCHAR(64) NOT NULL,
+  created_at  BIGINT NOT NULL,
+  KEY idx_billing_events_user (user_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Telemetria di salute dell'estensione (best-effort, non PII delle conversazioni).
+CREATE TABLE IF NOT EXISTS telemetry (
+  id          BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  user_id     BIGINT UNSIGNED,
+  event       VARCHAR(64) NOT NULL,
+  cc_version  VARCHAR(64),
+  detail      VARCHAR(512),
+  created_at  BIGINT NOT NULL,
+  KEY idx_telemetry_event (event, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

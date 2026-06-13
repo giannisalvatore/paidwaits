@@ -6,6 +6,7 @@ import { requireAuth, requireString } from "../middleware.js";
 import { ownedSession, isEarning } from "../services/guard.js";
 import { pickCampaign, campaignSpend } from "../services/auction.js";
 import { recordSpend, earnedSince } from "../services/ledger.js";
+import { getKillState, claimBillingEvent, isValidEventUuid, impressionCooldownOk } from "../services/serving.js";
 
 export const adsRouter = new Router();
 adsRouter.use(requireAuth);
@@ -33,12 +34,19 @@ adsRouter.get("/spinner-verbs", async (ctx) => {
 
 // L'estensione chiede un'ad a inizio thinking. L'asta sceglie la campagna.
 adsRouter.get("/ad/next", async (ctx) => {
+  // Serving gate: killswitch globale (env o platform_flags). Killed => nessun ad
+  // (l'overlay del webview sparisce entro un poll; nessun ad_request creato).
+  const kill = await getKillState();
+  if (kill.killed) {
+    ctx.status = 204;
+    return;
+  }
   const sessionId = requireString(ctx, ctx.query.session_id, "session_id", 36);
   const session = await ownedSession(ctx.state.userId, sessionId);
   if (!session) ctx.throw(404, "session_not_found");
   if (Date.now() - session.last_heartbeat > guard.HEARTBEAT_TTL_MS) ctx.throw(409, "session_expired");
 
-  const campaign = await pickCampaign();
+  const campaign = await pickCampaign(ctx.state.userId);
   if (!campaign) {
     ctx.status = 204;
     return;
@@ -82,6 +90,8 @@ function paidImpressionsSince(userId, sinceMs) {
 adsRouter.post("/impression", async (ctx) => {
   const adRequest = await loadPendingAdRequest(ctx);
   const now = Date.now();
+  const eventUuid = ctx.request.body?.event_uuid;
+  if (eventUuid !== undefined && !isValidEventUuid(eventUuid)) ctx.throw(400, "invalid_event_uuid");
 
   const reject = async (reason) => {
     await query("UPDATE ad_requests SET status = 'expired' WHERE id = ? AND status = 'pending'", [adRequest.id]);
@@ -93,6 +103,12 @@ adsRouter.post("/impression", async (ctx) => {
   if (now - adRequest.created_at > guard.AD_REQUEST_TTL_MS) return reject("expired");
   if (adRequest.earning !== 1) return reject("not_earning_session");
   if (!(await isEarning(ctx.state.userId, adRequest.session_id))) return reject("not_earning_session");
+
+  // Cooldown anti-burst: NON scade l'ad_request (è un throttle transitorio).
+  if (!(await impressionCooldownOk(ctx.state.userId, now))) {
+    ctx.body = { counted: false, reason: "cooldown" };
+    return;
+  }
 
   if ((await paidImpressionsSince(ctx.state.userId, now - HOUR_MS)) >= guard.IMP_HOUR_CAP) return reject("hour_cap");
   if ((await paidImpressionsSince(ctx.state.userId, now - DAY_MS)) >= guard.IMP_DAY_CAP) return reject("day_cap");
@@ -108,6 +124,12 @@ adsRouter.post("/impression", async (ctx) => {
   if (campaign.funded_micros - (await campaignSpend(campaign.id)) < costMicros) return reject("campaign_budget");
 
   const earned = await transaction(async (connection) => {
+    // Idempotenza: se questo event_uuid è già stato registrato è un replay → non rifatturare.
+    if (eventUuid && !(await claimBillingEvent(connection, {
+      eventUuid, kind: "impression", userId: ctx.state.userId, refId: adRequest.id,
+    }))) {
+      return "DUP";
+    }
     const [updated] = await connection.query(
       "UPDATE ad_requests SET status = 'converted' WHERE id = ? AND status = 'pending'",
       [adRequest.id]
@@ -127,6 +149,10 @@ adsRouter.post("/impression", async (ctx) => {
     });
   });
 
+  if (earned === "DUP") {
+    ctx.body = { counted: false, reason: "duplicate" };
+    return;
+  }
   if (earned === null) return reject("already_used");
   ctx.body = { counted: true, earned_micros: earned };
 });
@@ -136,6 +162,8 @@ adsRouter.post("/impression", async (ctx) => {
 adsRouter.post("/click", async (ctx) => {
   const adRequest = await loadPendingAdRequest(ctx);
   const now = Date.now();
+  const eventUuid = ctx.request.body?.event_uuid;
+  if (eventUuid !== undefined && !isValidEventUuid(eventUuid)) ctx.throw(400, "invalid_event_uuid");
 
   const impressions = await query(
     "SELECT id, campaign_id FROM impressions WHERE ad_request_id = ? AND user_id = ?",
@@ -171,7 +199,15 @@ adsRouter.post("/click", async (ctx) => {
     paidSameCampaign === 0 &&
     campaign.funded_micros - (await campaignSpend(campaign.id)) >= clickCostMicros;
 
+  let dup = false;
   await transaction(async (connection) => {
+    // Idempotenza: replay dello stesso event_uuid → non re-inserire il click.
+    if (eventUuid && !(await claimBillingEvent(connection, {
+      eventUuid, kind: "click", userId: ctx.state.userId, refId: String(impression.id),
+    }))) {
+      dup = true;
+      return;
+    }
     const cost = paid ? clickCostMicros : 0;
     await connection.query(
       "INSERT INTO clicks (impression_id, campaign_id, user_id, cost_micros, user_share_micros, created_at) VALUES (?, ?, ?, ?, 0, ?)",
@@ -187,5 +223,9 @@ adsRouter.post("/click", async (ctx) => {
     });
   });
 
+  if (dup) {
+    ctx.body = { counted: false, reason: "duplicate" };
+    return;
+  }
   ctx.body = { counted: true, paid };
 });

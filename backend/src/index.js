@@ -10,6 +10,7 @@ import { sessionRouter } from "./routes/session.js";
 import { adsRouter } from "./routes/ads.js";
 import { campaignsRouter } from "./routes/campaigns.js";
 import { meRouter } from "./routes/me.js";
+import { platformRouter } from "./routes/platform.js";
 
 const app = new Koa();
 app.keys = config.sessionKeys;
@@ -45,7 +46,7 @@ app.use(async (ctx, next) => {
   await next();
 });
 
-for (const router of [authRouter, sessionRouter, adsRouter, campaignsRouter, meRouter]) {
+for (const router of [authRouter, sessionRouter, adsRouter, campaignsRouter, meRouter, platformRouter]) {
   app.use(router.routes());
   app.use(router.allowedMethods());
 }

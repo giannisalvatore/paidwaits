@@ -15,7 +15,8 @@
     "commands": [
       { "command": "waitingads.connect", "title": "Paidwaits: Connect account" },
       { "command": "waitingads.restore", "title": "Paidwaits: Restore Claude Code (uninstall ads)" },
-      { "command": "waitingads.status", "title": "Paidwaits: Earnings status" }
+      { "command": "waitingads.status", "title": "Paidwaits: Earnings status" },
+      { "command": "waitingads.diagnose", "title": "Paidwaits: Diagnose" }
     ],
     "configuration": [
       {
@@ -35,14 +36,20 @@
       }
     ]
   },
+  "repository": { "type": "git", "url": "https://github.com/waitingads/waitingads" },
+  "license": "MIT",
   "scripts": {
     "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
     "watch": "npm run build -- --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "vscode:prepublish": "npm run build",
+    "package": "vsce package --no-dependencies",
+    "publish": "vsce publish --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
     "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.2.0",
     "esbuild": "^0.24.0",
     "typescript": "^5.6.3"
   }

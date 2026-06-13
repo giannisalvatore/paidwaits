@@ -4,43 +4,42 @@ import { Button } from "@/components/ui/button";
 export function SiteNav() {
   return (
     <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-md">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
+      <div className="relative mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
         <Link href="/" className="flex items-center">
-          <span className="text-lg font-semibold tracking-tight">Paidwaits</span>
+          <span className="text-xl font-semibold tracking-tight">Paidwaits</span>
         </Link>
-        <nav className="flex items-center gap-1">
+
+        {/* Centered nav */}
+        <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 sm:flex">
           <Link
             href="#how-it-works"
-            className="hidden rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground sm:block"
+            className="rounded-md px-3 py-1.5 text-sm font-semibold text-muted-foreground transition-colors duration-150 hover:bg-primary/10 hover:text-primary"
           >
             How it works
           </Link>
           <Link
             href="/advertiser"
-            className="hidden rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground sm:block"
+            className="rounded-md px-3 py-1.5 text-sm font-semibold text-muted-foreground transition-colors duration-150 hover:bg-primary/10 hover:text-primary"
           >
-            For advertisers
+            Advertisers
           </Link>
-          <Link
-            href="/dashboard"
-            className="hidden rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground sm:block"
-          >
-            Earnings
-          </Link>
+        </nav>
+
+        <div className="flex items-center gap-1">
           <Link
             href="/login"
-            className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground"
+            className="rounded-md px-3 py-1.5 text-sm font-semibold text-muted-foreground transition-colors duration-150 hover:bg-primary/10 hover:text-primary"
           >
             Sign in
           </Link>
           <Button
             asChild
             size="sm"
-            className="ml-2 h-8 bg-foreground text-background transition-colors duration-150 hover:bg-foreground/90"
+            className="ml-2 h-9 bg-primary text-sm font-semibold text-primary-foreground transition-colors duration-150 hover:bg-primary/90"
           >
             <Link href="/login">Install</Link>
           </Button>
-        </nav>
+        </div>
       </div>
     </header>
   );

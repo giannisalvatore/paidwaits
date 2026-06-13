@@ -37,14 +37,14 @@ export function BidMarket() {
           <p className="font-mono text-sm tabular-nums text-primary">
             {impressions.toLocaleString("en-US")}
           </p>
-          <p className="font-mono text-sm text-muted-foreground">impressions served today</p>
+          <p className="font-mono text-sm text-muted-foreground">Waits served today</p>
         </div>
 
         <p className="mt-10 font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          For advertisers · bid on this line
+          For advertisers · pay per Wait
         </p>
         <h2 className="mt-3 max-w-2xl text-balance text-3xl font-bold tracking-tight sm:text-4xl">
-          Bid live for the most-watched loading state on the internet.
+          Fill the most-watched loading state on the internet. Pay more, show more.
         </h2>
 
         <div className="mt-12">
@@ -65,13 +65,13 @@ export function BidMarket() {
                   Campaign
                 </TableHead>
                 <TableHead className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                  Bid (CPM)
+                  Price / 1k Waits
                 </TableHead>
                 <TableHead className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                  Traffic share
+                  Share of Waits
                 </TableHead>
                 <TableHead className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                  Impressions
+                  Waits
                 </TableHead>
                 <TableHead className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
                   Status

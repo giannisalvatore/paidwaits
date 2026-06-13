@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import * as os from "node:os";
 import * as fs from "node:fs";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { Api } from "./api";
 import { startLoopback } from "./loopback";
 import { discover } from "./adapters/registry";
@@ -9,11 +10,15 @@ import { waitingadsDir, writeCliAdCache, cliSessionActive } from "./cliAd";
 
 const HEARTBEAT_MS = 30_000;
 const CLISYNC_MS = 15_000;
-const CLI_WINDOW_MS = 120_000;      // sessione CLI "attiva" se transcript modificato < 2 min fa
-const CLI_IMPRESSION_AT_MS = 6_000; // > MIN_VIEW_MS backend (5s)
-const CLI_SLOT_MS = 30_000;         // ruota la creative CLI ogni ~30s
+const MAINTENANCE_MS = 60_000;       // poll killswitch + reassert drift
+const CLI_WINDOW_MS = 120_000;       // sessione CLI "attiva" se transcript modificato < 2 min fa
+const CLI_IMPRESSION_AT_MS = 6_000;  // > MIN_VIEW_MS backend (5s)
+const CLI_SLOT_MS = 30_000;          // ruota la creative CLI ogni ~30s
+const ACTIVE_KEY = "waitingads.active"; // intento utente: "ads accese" (persistito)
 
 const WEBVIEW_TARGETS = new Set(["claude-code", "codex"]);
+
+type KillPosture = "clear" | "confirmed" | "offline";
 
 interface Creative { adText: string; clickUrl: string; iconUrl: string; adId: string; }
 
@@ -21,18 +26,25 @@ export function activate(context: vscode.ExtensionContext): void {
   const api = new Api(context);
   let sessionId: string | null = null;
   let earnedTodayMicros = 0;
+  let killPosture: KillPosture = "clear";
   const home = os.homedir();
-
   const loopbackPort = vscode.workspace.getConfiguration("waitingads").get("loopbackPort", 48100);
+  const output = vscode.window.createOutputChannel("WaitingAds");
+  context.subscriptions.push(output);
 
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   context.subscriptions.push(statusBar);
   statusBar.show();
 
+  const isActiveIntent = (): boolean => context.globalState.get(ACTIVE_KEY, false);
+  const setActiveIntent = (v: boolean): Thenable<void> => context.globalState.update(ACTIVE_KEY, v);
+
+  function primaryVersion(): string {
+    const cc = discover().find((t) => t.id === "claude-code");
+    return cc?.adapter.version() || "unknown";
+  }
   function patchedTargets(): string[] {
-    return discover()
-      .filter((t) => t.adapter.isPatched?.() === true)
-      .map((t) => t.id);
+    return discover().filter((t) => t.adapter.isPatched?.() === true).map((t) => t.id);
   }
 
   function renderStatusBar(): void {
@@ -42,12 +54,18 @@ export function activate(context: vscode.ExtensionContext): void {
       statusBar.tooltip = "Connetti l'account Paidwaits";
       return;
     }
-    statusBar.text = `$(megaphone) $${(earnedTodayMicros / 1_000_000).toFixed(4)} oggi`;
     statusBar.command = "waitingads.status";
+    if (killPosture === "confirmed") {
+      statusBar.text = "$(megaphone) Paidwaits: sospeso";
+      statusBar.tooltip = "Serving sospeso dal killswitch lato server";
+      return;
+    }
+    statusBar.text = `$(megaphone) $${(earnedTodayMicros / 1_000_000).toFixed(4)} oggi`;
     const patched = patchedTargets();
-    statusBar.tooltip = patched.length
+    const offline = killPosture === "offline" ? " · offline" : "";
+    statusBar.tooltip = (patched.length
       ? `Paidwaits attivo su: ${patched.join(", ")}`
-      : "Paidwaits connesso — esegui 'Connect account' per attivare";
+      : "Paidwaits connesso — esegui 'Connect account' per attivare") + offline;
   }
 
   async function refreshEarnings(): Promise<void> {
@@ -62,7 +80,6 @@ export function activate(context: vscode.ExtensionContext): void {
     return sessionId;
   }
 
-  // Una creative dall'asta (crea un ad_request lato backend, billabile poi).
   async function currentCreative(): Promise<Creative | null> {
     const session = await ensureSession();
     if (!session) return null;
@@ -92,36 +109,29 @@ export function activate(context: vscode.ExtensionContext): void {
   }, HEARTBEAT_MS);
   context.subscriptions.push({ dispose: () => clearInterval(heartbeatInterval) });
 
-  // --- CLI sync: tiene fresche le creative delle superfici CLI (statusline +
-  // wrapper codex) e fattura le impression CLI lato host (i blocchi webview si
-  // auto-fatturano via loopback; le CLI no). ---
+  // --- CLI sync: creative fresche per le superfici CLI + billing impression CLI. ---
   let cliPending: { adId: string; fetchedAt: number; fired: boolean } | null = null;
-  function codexCliAdFile(): string { return join(waitingadsDir(home), "codex-cli-ad.txt"); }
-  function hasPatchedCliTarget(): boolean {
-    return discover().some((t) =>
-      (t.id === "claude-cli" || t.id === "codex-cli") && t.adapter.isPatched?.() === true);
-  }
+  const codexCliAdFile = (): string => join(waitingadsDir(home), "codex-cli-ad.txt");
+  const hasPatchedCliTarget = (): boolean =>
+    discover().some((t) => (t.id === "claude-cli" || t.id === "codex-cli") && t.adapter.isPatched?.() === true);
 
   const cliSyncInterval = setInterval(async () => {
     try {
-      if (!api.isConnected) return;
+      if (!api.isConnected || killPosture === "confirmed") return;
       if (!hasPatchedCliTarget()) return;
       const now = Date.now();
       const codexActive = discover().some((t) => t.id === "codex-cli" && t.adapter.isPatched?.());
-      const active = codexActive || cliSessionActive(now, CLI_WINDOW_MS);
-      if (!active) return;
+      if (!(codexActive || cliSessionActive(now, CLI_WINDOW_MS))) return;
 
-      // 1) Fattura l'impression in sospeso quando ha "vissuto" abbastanza.
       if (cliPending && !cliPending.fired && now - cliPending.fetchedAt >= CLI_IMPRESSION_AT_MS) {
         cliPending.fired = true;
-        const r = await api.impression(cliPending.adId);
+        const r = await api.impression(cliPending.adId, randomUUID());
         if (r && r.counted) void refreshEarnings();
       }
-      // 2) Ruota: nuova creative -> aggiorna le cache CLI.
       if (!cliPending || cliPending.fired || now - cliPending.fetchedAt >= CLI_SLOT_MS) {
         const ad = await currentCreative();
         if (ad) {
-          writeCliAdCache(home, ad);                       // statusline (cli-ad.json)
+          writeCliAdCache(home, ad);
           try {
             fs.mkdirSync(waitingadsDir(home), { recursive: true });
             fs.writeFileSync(codexCliAdFile(), (ad.adText || "WaitingAds") + "\n", "utf8");
@@ -133,24 +143,20 @@ export function activate(context: vscode.ExtensionContext): void {
   }, CLISYNC_MS);
   context.subscriptions.push({ dispose: () => clearInterval(cliSyncInterval) });
 
-  // Applica la patch a TUTTI i target presenti. Ritorna il riepilogo per il toast.
   async function applyAll(): Promise<{ patched: string[]; webview: boolean; incompatible: string[] }> {
-    const ad = await currentCreative(); // per le superfici CLI (adText/clickUrl iniziali)
-    const targets = discover();
+    const ad = await currentCreative();
     const patched: string[] = [];
     const incompatible: string[] = [];
     let webview = false;
-    for (const { id, adapter } of targets) {
+    for (const { id, adapter } of discover()) {
       const pf = adapter.preflight();
       if (!pf.compatible) { incompatible.push(id); continue; }
-      const r = adapter.applyPatch({
-        loopbackPort,
-        adText: ad?.adText,
-        clickUrl: ad?.clickUrl,
-      });
+      const r = adapter.applyPatch({ loopbackPort, adText: ad?.adText, clickUrl: ad?.clickUrl });
       if (r.ok) {
         patched.push(id);
         if (WEBVIEW_TARGETS.has(id)) webview = true;
+      } else {
+        void api.telemetry("patch_failed", pf.version || "unknown", `${id}: ${r.reason || "?"}`);
       }
     }
     return { patched, webview, incompatible };
@@ -162,7 +168,61 @@ export function activate(context: vscode.ExtensionContext): void {
       const r = adapter.restore();
       if (r.restored) restored.push(id);
     }
+    cliPending = null;
     return restored;
+  }
+
+  // --- Maintenance: poll killswitch (postura) + reassert drift (CC aggiornato). ---
+  async function maintenanceTick(): Promise<void> {
+    if (!api.isConnected || !isActiveIntent()) return;
+    const kill = await api.killswitch();
+    killPosture = kill === null ? "offline" : kill.killed ? "confirmed" : "clear";
+    renderStatusBar();
+
+    if (killPosture === "confirmed") {
+      // Kill confermato: smonta tutto (il server già non serve; qui togliamo i file).
+      // L'intento resta: quando il kill rientra, il reassert ri-applica.
+      if (patchedTargets().length > 0) {
+        const restored = restoreAll();
+        void api.telemetry("killed", primaryVersion(), `${kill?.reason || ""} restored=${restored.join(",")}`);
+      }
+      return;
+    }
+    if (killPosture === "offline") return; // freeze: né restore né nuove scritture
+
+    // clear: reassert. Se un target era patchato e ora non lo è più (CC aggiornato/
+    // sovrascritto), ri-applica così l'ad non sparisce in silenzio.
+    let creative: Creative | null = null;
+    const reasserted: string[] = [];
+    for (const { id, adapter } of discover()) {
+      if (adapter.isPatched?.() === true) continue;
+      const pf = adapter.preflight();
+      if (!pf.compatible) continue;
+      if (creative === null) creative = await currentCreative();
+      const r = adapter.applyPatch({ loopbackPort, adText: creative?.adText, clickUrl: creative?.clickUrl });
+      if (r.ok) reasserted.push(id);
+    }
+    if (reasserted.length) void api.telemetry("reassert", primaryVersion(), reasserted.join(","));
+  }
+  const maintInterval = setInterval(() => void maintenanceTick(), MAINTENANCE_MS);
+  context.subscriptions.push({ dispose: () => clearInterval(maintInterval) });
+
+  function diagnoseReport(): string {
+    const lines = [
+      `WaitingAds — diagnose`,
+      `connesso: ${api.isConnected} · intento attivo: ${isActiveIntent()} · kill: ${killPosture}`,
+      `loopback: 127.0.0.1:${loopbackPort}`,
+      ``,
+    ];
+    for (const { id, adapter } of discover()) {
+      const pf = adapter.preflight();
+      lines.push(
+        `[${id}] version=${pf.version} compatible=${pf.compatible} ` +
+        `patched=${adapter.isPatched?.() ?? "n/a"}${pf.reason ? ` reason="${pf.reason}"` : ""}`
+      );
+    }
+    if (lines.length === 4) lines.push("(nessun target trovato su questa macchina)");
+    return lines.join("\n");
   }
 
   context.subscriptions.push(
@@ -181,10 +241,13 @@ export function activate(context: vscode.ExtensionContext): void {
       await refreshEarnings();
 
       const { patched, webview, incompatible } = await applyAll();
+      await setActiveIntent(patched.length > 0);
       renderStatusBar();
+      void api.telemetry("connect", primaryVersion(), `patched=${patched.join(",")} incompat=${incompatible.join(",")}`);
+
       if (patched.length === 0) {
         vscode.window.showWarningMessage(
-          `Paidwaits: nessun target patchato. Trovati incompatibili: ${incompatible.join(", ") || "nessuno"}.`
+          `Paidwaits: nessun target patchato. Incompatibili: ${incompatible.join(", ") || "nessuno"}.`
         );
         return;
       }
@@ -201,8 +264,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand("waitingads.restore", async () => {
       const restored = restoreAll();
-      cliPending = null;
+      await setActiveIntent(false);
       renderStatusBar();
+      void api.telemetry("restore", primaryVersion(), restored.join(","));
       vscode.window
         .showInformationMessage(
           `Paidwaits: ripristinati ${restored.length ? restored.join(", ") : "nessun target"}. Ricarica la finestra.`,
@@ -220,16 +284,26 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
       const usd = (micros: number) => `$${(micros / 1_000_000).toFixed(4)}`;
-      const patched = patchedTargets();
       vscode.window.showInformationMessage(
         `Oggi ${usd(me.earned_today_micros)} · Mese ${usd(me.earned_month_micros)} · ` +
         `Saldo ${usd(me.balance_micros)} · ${me.impressions} impression · ` +
-        `Target: ${patched.join(", ") || "nessuno"}`
+        `Target: ${patchedTargets().join(", ") || "nessuno"}`
       );
+    }),
+
+    vscode.commands.registerCommand("waitingads.diagnose", async () => {
+      const report = diagnoseReport();
+      output.clear();
+      output.appendLine(report);
+      output.show(true);
+      void api.telemetry("diagnose", primaryVersion(), patchedTargets().join(","));
     })
   );
 
   void refreshEarnings();
+  void api.telemetry("activate", primaryVersion(), isActiveIntent() ? "active" : "idle");
+  // Reassert all'avvio: se CC si è aggiornato e ha cancellato la patch, ri-applicala.
+  if (isActiveIntent()) void maintenanceTick();
 }
 
 export function deactivate(): void {}

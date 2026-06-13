@@ -32,6 +32,13 @@ export function buildClaudeCodeBlock(port: number): string {
         return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
       });
     }
+    // event_uuid per l'idempotenza del billing lato server.
+    function newEventUuid() {
+      try { if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+        var r = Math.random() * 16 | 0, v = c === "x" ? r : (r & 0x3 | 0x8); return v.toString(16);
+      });
+    }
 
     // Spinner SOLO via classe: l'ultima riga non vuota è quella viva (il transcript
     // appende, la riga animata è sempre l'ultima). READ-ONLY, mai dentro l'editor.
@@ -132,7 +139,8 @@ export function buildClaudeCodeBlock(port: number): string {
     }
     function sendImpression() {
       try {
-        fetch(BASE + "/impression?ad=" + encodeURIComponent(AD.adId),
+        fetch(BASE + "/impression?ad=" + encodeURIComponent(AD.adId) +
+          "&event_uuid=" + encodeURIComponent(newEventUuid()),
           { method: "POST", keepalive: true }).catch(function () {});
       } catch (e) {}
     }
@@ -142,7 +150,8 @@ export function buildClaudeCodeBlock(port: number): string {
         var el = ev.target;
         while (el && el !== document) {
           if (el.getAttribute && el.getAttribute("data-paidwaits-ad")) {
-            var u = BASE + "/click?ad=" + encodeURIComponent(AD.adId);
+            var u = BASE + "/click?ad=" + encodeURIComponent(AD.adId) +
+              "&event_uuid=" + encodeURIComponent(newEventUuid());
             try {
               if (navigator && typeof navigator.sendBeacon === "function") navigator.sendBeacon(u);
               else fetch(u, { method: "POST", keepalive: true }).catch(function () {});

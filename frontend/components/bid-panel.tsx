@@ -60,7 +60,7 @@ export function BidPanel() {
     if (adLine.trim().length < 3 || adLine.trim().length > 60)
       errs.push("Ad line must be 3–60 characters.");
     if (!/^https:\/\/.+\..+/.test(url)) errs.push("Destination URL must start with https://");
-    if (bid < MIN_BID) errs.push(`Minimum bid is ${usd(MIN_BID)} CPM.`);
+    if (bid < MIN_BID) errs.push(`Minimum price is ${usd(MIN_BID)} per 1,000 Waits.`);
     if (budget < 50) errs.push("Minimum budget is $50.00.");
     setErrors(errs);
     setSubmitted(errs.length === 0);
@@ -69,9 +69,9 @@ export function BidPanel() {
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-4 sm:px-6">
-        <h3 className="font-semibold">Place your bid</h3>
+        <h3 className="font-semibold">Set your price</h3>
         <p className="font-mono text-xs text-muted-foreground">
-          no blocks · pay per impression
+          pay only for Waits
         </p>
       </div>
 
@@ -218,9 +218,9 @@ export function BidPanel() {
           <div className="grid gap-5 sm:grid-cols-2">
             <div>
               <label htmlFor="bid-amount" className="text-sm font-medium">
-                Bid (CPM){" "}
+                Price per 1,000 Waits{" "}
                 <span className="text-muted-foreground">
-                  (min {usd(MIN_BID)} — buys traffic share)
+                  (min {usd(MIN_BID)} — more = shown more)
                 </span>
               </label>
               <div className="relative mt-1.5">

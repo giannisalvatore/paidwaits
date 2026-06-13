@@ -27,4 +27,31 @@ export const guard = {
   IMP_DAY_CAP:          300,          // impression pagate max / giorno / utente
   CLICK_DAY_CAP:        3,            // click pagati max / giorno / utente
   EARN_DAY_CAP_MICROS:  5_000_000,    // guadagno max $5 / giorno / utente
+  // Cooldown anti-burst tra due impression PAGATE dello stesso utente. La cadenza
+  // legittima (slot ~6s) sta abbondantemente sopra, quindi non genera falsi
+  // positivi; un client che martella più veloce viene throttlato. (Nota: la
+  // pattern-detection comportamentale "intervalli regolari = bot" di ANALISI §4.5
+  // richiede telemetria sui thinking reali ed è rimandata: la nostra cadenza a
+  // slot renderebbe regolari anche le impression vere.)
+  IMP_COOLDOWN_MS:      4_000,
+};
+
+// Strategia d'asta: il bid compra VOLUME (incentivo a pagare di più).
+export const auction = {
+  // Penalità di recency: una campagna appena servita a QUESTO utente è declassata
+  // finché non passa questa finestra (evita due viste consecutive della stessa).
+  REPEAT_COOLDOWN_MS: 45_000,
+  // Fattore minimo residuo di una campagna appena vista (non la azzera del tutto:
+  // se è l'unica eleggibile deve poter comunque essere servita).
+  REPEAT_MIN_FACTOR: 0.02,
+  // Esponente del bid nella lotteria: 1 = quota ∝ bid; >1 = chi rilancia ottiene
+  // quota SPROPORZIONATA (guerra di bid più aggressiva, più ricavi).
+  BID_EXPONENT: 1,
+};
+
+// Killswitch d'emergenza via ambiente (oltre al flag in platform_flags).
+// KILLSWITCH=true ferma TUTTO il serving al riavvio del backend, senza DB.
+export const ops = {
+  envKill: process.env.KILLSWITCH === "true",
+  envKillReason: process.env.KILLSWITCH_REASON || "env killswitch",
 };

@@ -62,12 +62,37 @@ export class Api {
     return response.json();
   }
 
-  async impression(adRequestId: string): Promise<any | null> {
-    const response = await this.request("POST", "/impression", { ad_request_id: adRequestId });
+  async impression(adRequestId: string, eventUuid?: string): Promise<any | null> {
+    const body: Record<string, unknown> = { ad_request_id: adRequestId };
+    if (eventUuid) body.event_uuid = eventUuid;
+    const response = await this.request("POST", "/impression", body);
     return response.ok ? response.json() : null;
   }
 
-  async click(adRequestId: string): Promise<void> {
-    await this.request("POST", "/click", { ad_request_id: adRequestId });
+  async click(adRequestId: string, eventUuid?: string): Promise<void> {
+    const body: Record<string, unknown> = { ad_request_id: adRequestId };
+    if (eventUuid) body.event_uuid = eventUuid;
+    await this.request("POST", "/click", body);
+  }
+
+  // Killswitch globale: l'estensione lo poll-a. Ritorna null su errore/offline
+  // (il chiamante adotta la postura "offline" → freeze, non ripristina).
+  async killswitch(): Promise<{ killed: boolean; reason: string } | null> {
+    try {
+      const response = await this.request("GET", "/killswitch");
+      if (!response.ok) return null;
+      return (await response.json()) as { killed: boolean; reason: string };
+    } catch {
+      return null;
+    }
+  }
+
+  // Telemetria di salute (best-effort, mai blocca nulla).
+  async telemetry(event: string, ccVersion?: string, detail?: string): Promise<void> {
+    try {
+      await this.request("POST", "/telemetry", { event, cc_version: ccVersion, detail });
+    } catch {
+      /* best-effort */
+    }
   }
 }

@@ -39,6 +39,7 @@ export function startLoopback(port: number, deps: LoopbackDeps): http.Server {
       return;
     }
     const adId = url.searchParams.get("ad") || "";
+    const eventUuid = url.searchParams.get("event_uuid") || undefined;
 
     try {
       // GET /ad — asta lato host: crea l'ad_request e ritorna la creative.
@@ -69,7 +70,7 @@ export function startLoopback(port: number, deps: LoopbackDeps): http.Server {
       // earning, cap) e accredita; solo se contata aggiorniamo i guadagni.
       if (request.method === "POST" && url.pathname === "/impression") {
         if (AD_ID_RE.test(adId)) {
-          const result = await deps.api.impression(adId);
+          const result = await deps.api.impression(adId, eventUuid);
           if (result && result.counted) deps.onImpression();
         }
         response.writeHead(204);
@@ -80,7 +81,7 @@ export function startLoopback(port: number, deps: LoopbackDeps): http.Server {
       // POST /click?ad=<ad_request_id> — la landing l'ha già aperta l'<a href> nel
       // webview; qui registriamo solo il click (il backend richiede l'impression).
       if (request.method === "POST" && url.pathname === "/click") {
-        if (AD_ID_RE.test(adId)) await deps.api.click(adId);
+        if (AD_ID_RE.test(adId)) await deps.api.click(adId, eventUuid);
         response.writeHead(204);
         response.end();
         return;

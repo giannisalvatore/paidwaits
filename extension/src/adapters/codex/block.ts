@@ -29,6 +29,12 @@ export function buildCodexBlock(port: number): string {
         return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
       });
     }
+    function newEventUuid() {
+      try { if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID(); } catch (e) {}
+      return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+        var r = Math.random() * 16 | 0, v = c === "x" ? r : (r & 0x3 | 0x8); return v.toString(16);
+      });
+    }
 
     // Riga thinking-shimmer di Codex (read-only): combo di classi stabile
     // text-size-chat + truncate + select-none + loading-shimmer, rect non-zero,
@@ -144,7 +150,8 @@ export function buildCodexBlock(port: number): string {
     }
     function sendImpression() {
       try {
-        fetch(BASE + "/impression?ad=" + encodeURIComponent(AD.adId),
+        fetch(BASE + "/impression?ad=" + encodeURIComponent(AD.adId) +
+          "&event_uuid=" + encodeURIComponent(newEventUuid()),
           { method: "POST", keepalive: true }).catch(function () {});
       } catch (e) {}
     }
@@ -154,7 +161,8 @@ export function buildCodexBlock(port: number): string {
         var el = ev.target;
         while (el && el !== document) {
           if (el.getAttribute && el.getAttribute("data-paidwaits-ad")) {
-            var u = BASE + "/click?ad=" + encodeURIComponent(AD.adId);
+            var u = BASE + "/click?ad=" + encodeURIComponent(AD.adId) +
+              "&event_uuid=" + encodeURIComponent(newEventUuid());
             try {
               if (navigator && typeof navigator.sendBeacon === "function") navigator.sendBeacon(u);
               else fetch(u, { method: "POST", keepalive: true }).catch(function () {});
