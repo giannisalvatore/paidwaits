@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { query, scalar } from "../db.js";
 import { economics } from "../config.js";
 import { requireAuth, requireString, requireNumber, requireHttpsUrl } from "../middleware.js";
+import { auction } from "../config.js";
 import { campaignSpend } from "../services/auction.js";
 
 export const campaignsRouter = new Router();
@@ -14,7 +15,7 @@ const DAY_MS = 86_400_000;
 async function ownedCampaign(ctx) {
   const campaignId = requireNumber(ctx, ctx.params.id, "campaign_id", { min: 1 });
   const rows = await query(
-    "SELECT id, advertiser_id, name, creative_text, image_url, target_url, bid_micros, funded_micros, status FROM campaigns WHERE id = ? AND advertiser_id = ?",
+    "SELECT id, advertiser_id, name, creative_text, image_url, target_url, bid_micros, blocks, funded_micros, status FROM campaigns WHERE id = ? AND advertiser_id = ?",
     [campaignId, ctx.state.userId]
   );
   if (rows.length === 0) ctx.throw(404, "campaign_not_found");
@@ -24,7 +25,7 @@ async function ownedCampaign(ctx) {
 // Le proprie campagne, con statistiche e budget residuo.
 campaignsRouter.get("/campaigns", async (ctx) => {
   const campaigns = await query(
-    "SELECT id, name, creative_text, image_url, target_url, bid_micros, funded_micros, status, created_at FROM campaigns WHERE advertiser_id = ? ORDER BY created_at DESC",
+    "SELECT id, name, creative_text, image_url, target_url, bid_micros, blocks, funded_micros, status, created_at FROM campaigns WHERE advertiser_id = ? ORDER BY created_at DESC",
     [ctx.state.userId]
   );
   const result = [];
@@ -32,13 +33,18 @@ campaignsRouter.get("/campaigns", async (ctx) => {
     const impressions = await scalar("SELECT COUNT(*) FROM impressions WHERE campaign_id = ?", [campaign.id]);
     const clicks = await scalar("SELECT COUNT(*) FROM clicks WHERE campaign_id = ?", [campaign.id]);
     const spent = await campaignSpend(campaign.id);
+    const viewsTotal = campaign.blocks * auction.VIEWS_PER_BLOCK;
     result.push({
       id: campaign.id,
       name: campaign.name,
       creative_text: campaign.creative_text,
       image_url: campaign.image_url,
       target_url: campaign.target_url,
-      bid_micros: campaign.bid_micros,
+      bid_micros: campaign.bid_micros,         // prezzo per block (= per 1.000 views)
+      blocks: campaign.blocks,
+      views_total: viewsTotal,
+      views_delivered: impressions,
+      views_remaining: Math.max(0, viewsTotal - impressions),
       funded_micros: campaign.funded_micros,
       remaining_micros: campaign.funded_micros - spent,
       status: campaign.status,
@@ -51,9 +57,10 @@ campaignsRouter.get("/campaigns", async (ctx) => {
   ctx.body = { campaigns: result };
 });
 
-// Crea e finanzia la campagna in un colpo solo. Il budget E il pagamento (bottone "Lancia").
-// MVP: il fondo viene accreditato direttamente. TODO produzione: Stripe Checkout + webhook,
-// la campagna diventa 'live' SOLO alla conferma del pagamento.
+// Crea e finanzia la campagna in un colpo solo. Modello a BLOCK: scegli quanti
+// BLOCK comprare (1 block = 1.000 views da 5s garantite) e il BID (prezzo per
+// block = anche la posizione in coda). Paghi blocks × bid. Il pagamento È il lancio.
+// MVP: il fondo è accreditato direttamente. TODO produzione: Stripe Checkout + webhook.
 campaignsRouter.post("/campaigns", async (ctx) => {
   const body = ctx.request.body || {};
   const name = requireString(ctx, body.name, "name", 100);
@@ -61,51 +68,41 @@ campaignsRouter.post("/campaigns", async (ctx) => {
   const targetUrl = requireHttpsUrl(ctx, body.target_url, "target_url");
   const imageUrl = body.image_url ? requireHttpsUrl(ctx, body.image_url, "image_url") : null;
   const bidUsd = requireNumber(ctx, body.bid_usd, "bid_usd", { min: economics.MIN_BID_MICROS / MICROS, max: 10_000 });
-  const budgetUsd = requireNumber(ctx, body.budget_usd, "budget_usd", {
-    min: economics.MIN_CAMPAIGN_FUND_MICROS / MICROS,
-    max: 100_000,
-  });
+  const blocks = Math.floor(requireNumber(ctx, body.blocks, "blocks", { min: 1, max: 100_000 }));
+
+  const bidMicros = Math.round(bidUsd * MICROS);
+  const fundedMicros = blocks * bidMicros;
+  if (fundedMicros < economics.MIN_CAMPAIGN_FUND_MICROS) ctx.throw(400, "below_min_fund");
 
   const result = await query(
-    "INSERT INTO campaigns (advertiser_id, name, creative_text, image_url, target_url, bid_micros, funded_micros, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'live', ?)",
-    [
-      ctx.state.userId,
-      name,
-      creativeText,
-      imageUrl,
-      targetUrl,
-      Math.round(bidUsd * MICROS),
-      Math.round(budgetUsd * MICROS),
-      Date.now(),
-    ]
+    "INSERT INTO campaigns (advertiser_id, name, creative_text, image_url, target_url, bid_micros, blocks, funded_micros, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'live', ?)",
+    [ctx.state.userId, name, creativeText, imageUrl, targetUrl, bidMicros, blocks, fundedMicros, Date.now()]
   );
-  // Registra il pagamento del budget (audit trail).
+  // Registra il pagamento (audit trail).
   await query(
     "INSERT INTO ledger (account_type, account_id, amount_micros, ref_type, ref_id, created_at) VALUES ('advertiser', ?, ?, 'deposit', ?, ?)",
-    [ctx.state.userId, Math.round(budgetUsd * MICROS), `campaign:${result.insertId}`, Date.now()]
+    [ctx.state.userId, fundedMicros, `campaign:${result.insertId}`, Date.now()]
   );
   ctx.status = 201;
   ctx.body = { id: result.insertId };
 });
 
-// Aggiunge budget a una campagna esistente (top-up = pagamento).
+// Aggiunge BLOCK a una campagna esistente (top-up = pagamento). Costano al bid corrente.
 campaignsRouter.post("/campaigns/:id/fund", async (ctx) => {
   const campaign = await ownedCampaign(ctx);
-  const amountUsd = requireNumber(ctx, ctx.request.body?.amount_usd, "amount_usd", {
-    min: economics.MIN_CAMPAIGN_FUND_MICROS / MICROS,
-    max: 100_000,
-  });
-  const amountMicros = Math.round(amountUsd * MICROS);
-  await query("UPDATE campaigns SET funded_micros = funded_micros + ? WHERE id = ? AND advertiser_id = ?", [
-    amountMicros,
+  const blocks = Math.floor(requireNumber(ctx, ctx.request.body?.blocks, "blocks", { min: 1, max: 100_000 }));
+  const addMicros = blocks * campaign.bid_micros;
+  await query("UPDATE campaigns SET blocks = blocks + ?, funded_micros = funded_micros + ? WHERE id = ? AND advertiser_id = ?", [
+    blocks,
+    addMicros,
     campaign.id,
     ctx.state.userId,
   ]);
   await query(
     "INSERT INTO ledger (account_type, account_id, amount_micros, ref_type, ref_id, created_at) VALUES ('advertiser', ?, ?, 'deposit', ?, ?)",
-    [ctx.state.userId, amountMicros, `campaign:${campaign.id}`, Date.now()]
+    [ctx.state.userId, addMicros, `campaign:${campaign.id}`, Date.now()]
   );
-  ctx.body = { funded_micros: campaign.funded_micros + amountMicros };
+  ctx.body = { blocks: campaign.blocks + blocks, funded_micros: campaign.funded_micros + addMicros };
 });
 
 // L'unica leva di delivery e il bid: modificabile live. Ownership check su tutto.
@@ -170,14 +167,15 @@ campaignsRouter.get("/campaigns/summary", async (ctx) => {
     [userId]
   );
 
-  // Conta come "serving" le campagne live con budget residuo.
+  // Conta come "serving" le campagne live con views ancora da consegnare (block residui).
   const live = await query(
-    "SELECT id, funded_micros FROM campaigns WHERE advertiser_id = ? AND status = 'live'",
+    "SELECT id, blocks FROM campaigns WHERE advertiser_id = ? AND status = 'live'",
     [userId]
   );
   let serving = 0;
   for (const campaign of live) {
-    if (campaign.funded_micros - (await campaignSpend(campaign.id)) >= 1) serving += 1;
+    const delivered = await scalar("SELECT COUNT(*) FROM impressions WHERE campaign_id = ?", [campaign.id]);
+    if (delivered < campaign.blocks * auction.VIEWS_PER_BLOCK) serving += 1;
   }
 
   // Serie giornaliera: bucket lato app (niente alias SQL).

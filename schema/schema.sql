@@ -37,8 +37,9 @@ CREATE TABLE IF NOT EXISTS campaigns (
   creative_text  TEXT NOT NULL,
   image_url      VARCHAR(2048),
   target_url     VARCHAR(2048) NOT NULL,
-  bid_micros     BIGINT NOT NULL,          -- CPM in micros, min 1_000_000 ($1)
-  funded_micros  BIGINT NOT NULL DEFAULT 0,-- budget pagato per QUESTA campagna; remaining = funded - spesa
+  bid_micros     BIGINT NOT NULL,          -- prezzo per BLOCK (= per 1.000 views da 5s) in micros, min 1_000_000 ($1); è anche il rank in coda
+  blocks         BIGINT NOT NULL DEFAULT 0,-- block acquistati; 1 block = 1.000 views GARANTITE da consegnare
+  funded_micros  BIGINT NOT NULL DEFAULT 0,-- pagato = somma(block × bid al momento dell'acquisto)
   status         ENUM('live','paused') NOT NULL DEFAULT 'live',
   created_at     BIGINT NOT NULL,
   KEY idx_campaigns_adv (advertiser_id),

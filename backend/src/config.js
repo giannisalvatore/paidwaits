@@ -36,17 +36,15 @@ export const guard = {
   IMP_COOLDOWN_MS:      4_000,
 };
 
-// Strategia d'asta: il bid compra VOLUME (incentivo a pagare di più).
+// Modello a BLOCK (stile kickbacks): i block comprano VOLUME (views garantite),
+// il bid compra POSIZIONE IN CODA (consegna prima), non più views.
+// Una "view" è una visualizzazione da 5 secondi dell'ad durante il thinking.
 export const auction = {
-  // Penalità di recency: una campagna appena servita a QUESTO utente è declassata
-  // finché non passa questa finestra (evita due viste consecutive della stessa).
+  VIEWS_PER_BLOCK: 1_000, // 1 block = 1.000 views (da 5s) garantite
+  // Anti-ripetizione per utente: una campagna appena servita a QUESTO utente viene
+  // spinta in fondo per questa finestra, così non la rivede due volte di fila
+  // (mentre la coda globale resta ordinata per bid). Tiebreak, non cambia il volume.
   REPEAT_COOLDOWN_MS: 45_000,
-  // Fattore minimo residuo di una campagna appena vista (non la azzera del tutto:
-  // se è l'unica eleggibile deve poter comunque essere servita).
-  REPEAT_MIN_FACTOR: 0.02,
-  // Esponente del bid nella lotteria: 1 = quota ∝ bid; >1 = chi rilancia ottiene
-  // quota SPROPORZIONATA (guerra di bid più aggressiva, più ricavi).
-  BID_EXPONENT: 1,
 };
 
 // Killswitch d'emergenza via ambiente (oltre al flag in platform_flags).
