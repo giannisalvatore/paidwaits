@@ -1,22 +1,10 @@
 // Script iniettato DENTRO il webview di Claude Code (gira con la sua CSP).
-//
-// Approccio (copiato da kickbacks.ai, adattato a CC 2.1.175 e al nostro backend):
-//   • Rileva lo spinner "thinking" via la classe `spinnerRow_*` (NON un verbo: in
-//     CC il glifo animato e il verbo sono in <span> separati, e scansionare tutto
-//     il documento per parole-verbo colpirebbe l'editor/markdown — prime directive).
-//   • Liveness = FRESHNESS: lo spinner è "vivo" se il primo glifo cambia entro
-//     GRACE_MS (CC cicla 6 glifi ogni 120ms). Niente codepoint hardcoded → robusto
-//     anche se CC cambia i glifi tra le versioni.
-//   • Render = overlay a livello <body>, posizionato in SOLA LETTURA sopra il rect
-//     dello spinner (getBoundingClientRect + requestAnimationFrame). NON tocchiamo
-//     MAI l'albero React di CC: mutarlo farebbe smontare lo spinner alla prossima
-//     reconciliation. Sfondo opaco a tema così copre il verbo sotto.
-//   • L'ad è un vero <a href> verso l'inserzionista: è l'UNICO click-out che
-//     sopravvive alla CSP `default-src 'none'` (lo apre il host di VS Code).
-//   • La creative arriva live dal loopback (`GET /ad`); impression/click sono
-//     pingati al loopback con l'adId, che lato host fa l'asta/billing reali.
-// Tutto in try/catch: non deve MAI far crashare Claude Code. Logga su [paidwaits].
-export function buildInjectedScript(port: number): string {
+// Vedi il commento storico in cima all'adapter. In breve: rileva lo spinner via
+// la classe `spinnerRow_*` (read-only), liveness via FRESHNESS del glifo, overlay
+// a livello <body> sopra il rect dello spinner (mai mutiamo l'albero React di CC),
+// ad come vero <a href> (unico click-out che sopravvive alla CSP), creative live
+// dal loopback (GET /ad). Tutto in try/catch: non deve MAI far crashare CC.
+export function buildClaudeCodeBlock(port: number): string {
   return `/* PAIDWADS-START */
 (function () {
   try {
@@ -37,7 +25,7 @@ export function buildInjectedScript(port: number): string {
     var _rectKey = "";
     var rafPending = false;
 
-    console.log("[paidwaits] injected");
+    console.log("[paidwaits] injected (claude-code)");
 
     function esc(s) {
       return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) {
@@ -59,8 +47,6 @@ export function buildInjectedScript(port: number): string {
       } catch (e) { return null; }
     }
 
-    // Sfondo opaco a tema: risale gli antenati al primo background non trasparente
-    // così l'overlay copre davvero il verbo animato di CC senza farlo trasparire.
     function surfaceBg(el) {
       try {
         var n = el, hops = 0;
@@ -73,7 +59,6 @@ export function buildInjectedScript(port: number): string {
       return "var(--vscode-editor-background,#1e1e1e)";
     }
 
-    // L'overlay vive su <body>, FUORI dall'albero React di CC (mai mutato).
     function ensureOverlay(row) {
       if (overlay && overlay.parentNode) return overlay;
       overlay = document.createElement("div");
@@ -89,8 +74,6 @@ export function buildInjectedScript(port: number): string {
       return overlay;
     }
 
-    // Posiziona SOPRA lo spinner (r.top, non sotto). Scrive lo stile solo quando il
-    // rect cambia, per non thrashare il layout durante lo scroll/streaming.
     function placeOverlay(row) {
       try {
         var r = row.getBoundingClientRect();
@@ -99,7 +82,7 @@ export function buildInjectedScript(port: number): string {
           if (key !== _rectKey) {
             _rectKey = key;
             overlay.style.left = r.left + "px";
-            overlay.style.top = r.top + "px";
+            overlay.style.top = r.top + "px";        // r.top -> SOPRA lo spinner
             overlay.style.minWidth = r.width + "px";
             overlay.style.height = r.height + "px";
             overlay.style.visibility = "visible";
@@ -108,8 +91,6 @@ export function buildInjectedScript(port: number): string {
       } catch (e) {}
     }
 
-    // Costruisce la creative: vero <a href> (lo apre il host di VS Code, CSP-exempt).
-    // Ricostruito SOLO al cambio di adId, mai ogni frame (non staccare l'anchor).
     function renderAd() {
       if (!overlay) return;
       var href = AD.clickUrl ? esc(AD.clickUrl) : "#";
@@ -132,15 +113,12 @@ export function buildInjectedScript(port: number): string {
         adText: d.adText || "", clickUrl: d.clickUrl || "", iconUrl: d.iconUrl || "",
         adId: d.adId || "", campaignId: d.campaignId || "",
       };
-      renderedAdId = null;   // forza re-render -> shownAt riparte al primo display reale
+      renderedAdId = null;
     }
     function clearAd() {
       AD = { adText: "", clickUrl: "", iconUrl: "", adId: "", campaignId: "" };
       renderedAdId = null;
     }
-
-    // GET /ad: il loopback fa l'asta lato host (crea l'ad_request) e ritorna la
-    // creative + l'adId che useremo per impression/click. {} = nessuna campagna.
     function fetchAd() {
       if (fetchingAd) return;
       fetchingAd = true;
@@ -152,7 +130,6 @@ export function buildInjectedScript(port: number): string {
         }).catch(function () { fetchingAd = false; });
       } catch (e) { fetchingAd = false; }
     }
-
     function sendImpression() {
       try {
         fetch(BASE + "/impression?ad=" + encodeURIComponent(AD.adId),
@@ -160,8 +137,6 @@ export function buildInjectedScript(port: number): string {
       } catch (e) {}
     }
 
-    // Click: l'anchor apre già la landing (CSP-exempt); questo è SOLO la metrica di
-    // billing. Mai preventDefault. Cattura in fase di capture, super-difensivo.
     document.addEventListener("click", function (ev) {
       try {
         var el = ev.target;
@@ -172,14 +147,13 @@ export function buildInjectedScript(port: number): string {
               if (navigator && typeof navigator.sendBeacon === "function") navigator.sendBeacon(u);
               else fetch(u, { method: "POST", keepalive: true }).catch(function () {});
             } catch (e) {}
-            return;
+            return;          // mai preventDefault: lascia aprire l'href
           }
           el = el.parentNode;
         }
       } catch (e) {}
     }, true);
 
-    // rAF: tiene l'overlay incollato allo spinner anche durante scroll/streaming.
     function frame() {
       rafPending = false;
       try {
@@ -203,31 +177,22 @@ export function buildInjectedScript(port: number): string {
         if (row) {
           var t = (row.textContent || "").replace(/^[\\s\\u00A0]+/, "");
           var cc = t.charCodeAt(0) | 0;
-          if (cc !== lastSig) { lastSig = cc; lastSigMs = now; }  // glifo ciclato => thinking
+          if (cc !== lastSig) { lastSig = cc; lastSigMs = now; }
           active = lastSigMs > 0 && (now - lastSigMs) <= GRACE_MS && t.length > 0;
         } else {
-          lastSig = null;  // riga smontata (idle): il prossimo glifo conta come cambio
+          lastSig = null;
         }
 
         if (active) {
           if (!AD.adText) {
-            // Nessuna creative: poll /ad con backoff (non a ogni tick).
             if (!fetchingAd && (now - lastFetchAt) >= REFETCH_MS) fetchAd();
           } else {
             ensureOverlay(row);
             if (renderedAdId !== AD.adId) {
-              // Nuova creative entra in scena: nuova finestra di display.
-              renderAd();
-              renderedAdId = AD.adId;
-              shownAt = now;
-              impressionSent = false;
+              renderAd(); renderedAdId = AD.adId; shownAt = now; impressionSent = false;
             }
             placeOverlay(row);
             schedule();
-            // Impression: UNA per adId, dopo 6s di DISPLAY reale (now - shownAt), non
-            // dall'adozione — così una creative solo prefetchata non viene mai billata
-            // senza essere stata davvero a schermo. Poi ruota: slot ~6s, 1 impression
-            // ciascuno (un thinking da 15s mostra ~2-3 ad).
             if (!impressionSent && AD.adId && (now - shownAt) >= IMPRESSION_AT_MS) {
               impressionSent = true;
               sendImpression();
@@ -243,12 +208,8 @@ export function buildInjectedScript(port: number): string {
 
     setInterval(evaluate, EVAL_MS);
 
-    // Prefetch all'avvio: scarica una creative (e scalda la sessione lato loopback)
-    // PRIMA del primo turno. Senza, il primo "thinking" restava senza ad finché la
-    // prima /ad non rispondeva — lenta perché crea anche la sessione — e l'ad
-    // sembrava comparire "quando cambia la frase". Retry a vuoto (max 5 × 2s) per
-    // coprire l'extension host non ancora pronto al load del webview. Si ferma da
-    // sé appena AD è popolata.
+    // Prefetch all'avvio: creative pronta (e sessione scaldata) prima del primo
+    // turno, così il primo "thinking" mostra subito l'ad. Retry a vuoto (max 5×2s).
     var _prefetchTries = 0;
     function prefetch() {
       try {
@@ -264,5 +225,5 @@ export function buildInjectedScript(port: number): string {
 /* PAIDWADS-END */`;
 }
 
-export const INJECT_START = "/* PAIDWADS-START */";
-export const INJECT_END = "/* PAIDWADS-END */";
+export const BLOCK_START = "/* PAIDWADS-START */";
+export const BLOCK_END = "/* PAIDWADS-END */";

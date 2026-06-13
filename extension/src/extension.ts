@@ -1,20 +1,39 @@
 import * as vscode from "vscode";
+import * as os from "node:os";
+import * as fs from "node:fs";
+import { join } from "node:path";
 import { Api } from "./api";
 import { startLoopback } from "./loopback";
-import { patch, restore as restoreBundle, isPatched } from "./patcher";
+import { discover } from "./adapters/registry";
+import { waitingadsDir, writeCliAdCache, cliSessionActive } from "./cliAd";
 
 const HEARTBEAT_MS = 30_000;
+const CLISYNC_MS = 15_000;
+const CLI_WINDOW_MS = 120_000;      // sessione CLI "attiva" se transcript modificato < 2 min fa
+const CLI_IMPRESSION_AT_MS = 6_000; // > MIN_VIEW_MS backend (5s)
+const CLI_SLOT_MS = 30_000;         // ruota la creative CLI ogni ~30s
+
+const WEBVIEW_TARGETS = new Set(["claude-code", "codex"]);
+
+interface Creative { adText: string; clickUrl: string; iconUrl: string; adId: string; }
 
 export function activate(context: vscode.ExtensionContext): void {
   const api = new Api(context);
   let sessionId: string | null = null;
   let earnedTodayMicros = 0;
+  const home = os.homedir();
 
   const loopbackPort = vscode.workspace.getConfiguration("waitingads").get("loopbackPort", 48100);
 
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   context.subscriptions.push(statusBar);
   statusBar.show();
+
+  function patchedTargets(): string[] {
+    return discover()
+      .filter((t) => t.adapter.isPatched?.() === true)
+      .map((t) => t.id);
+  }
 
   function renderStatusBar(): void {
     if (!api.isConnected) {
@@ -25,8 +44,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     statusBar.text = `$(megaphone) $${(earnedTodayMicros / 1_000_000).toFixed(4)} oggi`;
     statusBar.command = "waitingads.status";
-    statusBar.tooltip = isPatched()
-      ? "Paidwaits attivo — l'ad appare sopra lo spinner di Claude"
+    const patched = patchedTargets();
+    statusBar.tooltip = patched.length
+      ? `Paidwaits attivo su: ${patched.join(", ")}`
       : "Paidwaits connesso — esegui 'Connect account' per attivare";
   }
 
@@ -42,7 +62,23 @@ export function activate(context: vscode.ExtensionContext): void {
     return sessionId;
   }
 
-  // Loopback: ponte autenticato tra lo script iniettato nel webview e il backend.
+  // Una creative dall'asta (crea un ad_request lato backend, billabile poi).
+  async function currentCreative(): Promise<Creative | null> {
+    const session = await ensureSession();
+    if (!session) return null;
+    const ad = await api.nextAd(session);
+    if (!ad || !ad.campaign) return null;
+    const name: string = ad.campaign.name || "";
+    const creative: string = ad.campaign.creative_text || "";
+    return {
+      adText: name ? `${name}: ${creative}` : creative,
+      clickUrl: ad.campaign.target_url || "",
+      iconUrl: ad.campaign.image_url || "",
+      adId: ad.ad_request_id || "",
+    };
+  }
+
+  // Loopback: ponte tra i blocchi webview (claude-code, codex) e il backend.
   const loopback = startLoopback(loopbackPort, {
     api,
     getSession: ensureSession,
@@ -56,26 +92,77 @@ export function activate(context: vscode.ExtensionContext): void {
   }, HEARTBEAT_MS);
   context.subscriptions.push({ dispose: () => clearInterval(heartbeatInterval) });
 
-  async function applyPatchAndPrompt(): Promise<void> {
-    // La creative arriva live dal loopback (GET /ad): niente più embed al patch-time.
-    // Se non ci sono campagne attive, il webview semplicemente non mostra l'overlay.
-    const result = patch(loopbackPort);
-    if (result.patched) {
-      vscode.window
-        .showInformationMessage(
-          `Paidwaits attivato su Claude Code ${result.version}. Ricarica la finestra perché l'ad appaia sopra lo spinner.`,
-          "Ricarica ora"
-        )
-        .then((choice) => {
-          if (choice === "Ricarica ora") void vscode.commands.executeCommand("workbench.action.reloadWindow");
-        });
-    } else if (result.reason === "claude_code_not_found") {
-      vscode.window.showWarningMessage("Paidwaits: estensione Claude Code non trovata. È installata?");
-    } else if (result.reason === "spinner_signature_not_found") {
-      vscode.window.showWarningMessage(
-        "Paidwaits: questa versione di Claude Code non è riconosciuta (firma spinner assente). Serve aggiornare il patcher."
-      );
+  // --- CLI sync: tiene fresche le creative delle superfici CLI (statusline +
+  // wrapper codex) e fattura le impression CLI lato host (i blocchi webview si
+  // auto-fatturano via loopback; le CLI no). ---
+  let cliPending: { adId: string; fetchedAt: number; fired: boolean } | null = null;
+  function codexCliAdFile(): string { return join(waitingadsDir(home), "codex-cli-ad.txt"); }
+  function hasPatchedCliTarget(): boolean {
+    return discover().some((t) =>
+      (t.id === "claude-cli" || t.id === "codex-cli") && t.adapter.isPatched?.() === true);
+  }
+
+  const cliSyncInterval = setInterval(async () => {
+    try {
+      if (!api.isConnected) return;
+      if (!hasPatchedCliTarget()) return;
+      const now = Date.now();
+      const codexActive = discover().some((t) => t.id === "codex-cli" && t.adapter.isPatched?.());
+      const active = codexActive || cliSessionActive(now, CLI_WINDOW_MS);
+      if (!active) return;
+
+      // 1) Fattura l'impression in sospeso quando ha "vissuto" abbastanza.
+      if (cliPending && !cliPending.fired && now - cliPending.fetchedAt >= CLI_IMPRESSION_AT_MS) {
+        cliPending.fired = true;
+        const r = await api.impression(cliPending.adId);
+        if (r && r.counted) void refreshEarnings();
+      }
+      // 2) Ruota: nuova creative -> aggiorna le cache CLI.
+      if (!cliPending || cliPending.fired || now - cliPending.fetchedAt >= CLI_SLOT_MS) {
+        const ad = await currentCreative();
+        if (ad) {
+          writeCliAdCache(home, ad);                       // statusline (cli-ad.json)
+          try {
+            fs.mkdirSync(waitingadsDir(home), { recursive: true });
+            fs.writeFileSync(codexCliAdFile(), (ad.adText || "WaitingAds") + "\n", "utf8");
+          } catch { /* best-effort */ }
+          cliPending = { adId: ad.adId, fetchedAt: now, fired: false };
+        }
+      }
+    } catch { /* never throw dal tick */ }
+  }, CLISYNC_MS);
+  context.subscriptions.push({ dispose: () => clearInterval(cliSyncInterval) });
+
+  // Applica la patch a TUTTI i target presenti. Ritorna il riepilogo per il toast.
+  async function applyAll(): Promise<{ patched: string[]; webview: boolean; incompatible: string[] }> {
+    const ad = await currentCreative(); // per le superfici CLI (adText/clickUrl iniziali)
+    const targets = discover();
+    const patched: string[] = [];
+    const incompatible: string[] = [];
+    let webview = false;
+    for (const { id, adapter } of targets) {
+      const pf = adapter.preflight();
+      if (!pf.compatible) { incompatible.push(id); continue; }
+      const r = adapter.applyPatch({
+        loopbackPort,
+        adText: ad?.adText,
+        clickUrl: ad?.clickUrl,
+      });
+      if (r.ok) {
+        patched.push(id);
+        if (WEBVIEW_TARGETS.has(id)) webview = true;
+      }
     }
+    return { patched, webview, incompatible };
+  }
+
+  function restoreAll(): string[] {
+    const restored: string[] = [];
+    for (const { id, adapter } of discover()) {
+      const r = adapter.restore();
+      if (r.restored) restored.push(id);
+    }
+    return restored;
   }
 
   context.subscriptions.push(
@@ -92,14 +179,35 @@ export function activate(context: vscode.ExtensionContext): void {
       sessionId = await api.startSession(vscode.env.machineId);
       if (sessionId) await api.heartbeat(sessionId);
       await refreshEarnings();
-      await applyPatchAndPrompt(); // login + patch del webview automatici
+
+      const { patched, webview, incompatible } = await applyAll();
+      renderStatusBar();
+      if (patched.length === 0) {
+        vscode.window.showWarningMessage(
+          `Paidwaits: nessun target patchato. Trovati incompatibili: ${incompatible.join(", ") || "nessuno"}.`
+        );
+        return;
+      }
+      const msg = `Paidwaits attivo su: ${patched.join(", ")}.` +
+        (webview ? " Ricarica la finestra perché l'ad appaia sopra lo spinner." : "");
+      if (webview) {
+        vscode.window.showInformationMessage(msg, "Ricarica ora").then((choice) => {
+          if (choice === "Ricarica ora") void vscode.commands.executeCommand("workbench.action.reloadWindow");
+        });
+      } else {
+        vscode.window.showInformationMessage(msg);
+      }
     }),
 
     vscode.commands.registerCommand("waitingads.restore", async () => {
-      restoreBundle();
+      const restored = restoreAll();
+      cliPending = null;
       renderStatusBar();
       vscode.window
-        .showInformationMessage("Paidwaits: file di Claude Code ripristinati. Ricarica la finestra.", "Ricarica ora")
+        .showInformationMessage(
+          `Paidwaits: ripristinati ${restored.length ? restored.join(", ") : "nessun target"}. Ricarica la finestra.`,
+          "Ricarica ora"
+        )
         .then((choice) => {
           if (choice === "Ricarica ora") void vscode.commands.executeCommand("workbench.action.reloadWindow");
         });
@@ -112,8 +220,11 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
       const usd = (micros: number) => `$${(micros / 1_000_000).toFixed(4)}`;
+      const patched = patchedTargets();
       vscode.window.showInformationMessage(
-        `Oggi ${usd(me.earned_today_micros)} · Mese ${usd(me.earned_month_micros)} · Saldo ${usd(me.balance_micros)} · ${me.impressions} impression`
+        `Oggi ${usd(me.earned_today_micros)} · Mese ${usd(me.earned_month_micros)} · ` +
+        `Saldo ${usd(me.balance_micros)} · ${me.impressions} impression · ` +
+        `Target: ${patched.join(", ") || "nessuno"}`
       );
     })
   );
