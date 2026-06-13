@@ -87,19 +87,19 @@ export default function UserDashboard() {
         </Button>
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
-        Soglia minima di payout: {usdFromMicros(me.min_payout_micros)}. I click non generano guadagno.
+        Minimum payout: {usdFromMicros(me.min_payout_micros)}. Clicks don&apos;t earn.
       </p>
       {message && <p className="mt-3 text-sm">{message}</p>}
 
       {payouts.length > 0 && (
         <div className="mt-10">
-          <h2 className="text-lg font-semibold">Storico payout</h2>
+          <h2 className="text-lg font-semibold">Payout history</h2>
           <Table className="mt-3">
             <TableHeader>
               <TableRow>
-                <TableHead>Data</TableHead>
-                <TableHead>Importo</TableHead>
-                <TableHead>Stato</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
