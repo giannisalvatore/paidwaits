@@ -14,6 +14,10 @@ type Campaign = {
   creative_text: string;
   target_url: string;
   bid_micros: number;
+  blocks: number;
+  views_total: number;
+  views_delivered: number;
+  views_remaining: number;
   funded_micros: number;
   remaining_micros: number;
   status: "live" | "paused";
@@ -33,13 +37,14 @@ type Summary = {
 };
 
 const CLICK_MULT = 50;
+const VIEWS_PER_BLOCK = 1000;
 const inputClass =
   "h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none transition-colors focus:border-primary/60 focus:ring-2 focus:ring-primary/20";
 
 export default function AdvertiserDashboard() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [form, setForm] = useState({ name: "", creative_text: "", target_url: "", bid_usd: "5", budget_usd: "50" });
+  const [form, setForm] = useState({ name: "", creative_text: "", target_url: "", bid_usd: "5", blocks: "10" });
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -63,9 +68,9 @@ export default function AdvertiserDashboard() {
     try {
       await api("/campaigns", {
         method: "POST",
-        body: JSON.stringify({ ...form, bid_usd: Number(form.bid_usd), budget_usd: Number(form.budget_usd) }),
+        body: JSON.stringify({ ...form, bid_usd: Number(form.bid_usd), blocks: Number(form.blocks) }),
       });
-      setForm({ name: "", creative_text: "", target_url: "", bid_usd: "5", budget_usd: "50" });
+      setForm({ name: "", creative_text: "", target_url: "", bid_usd: "5", blocks: "10" });
       await load();
       setMessage("Campaign launched.");
     } catch (error) {
@@ -81,26 +86,28 @@ export default function AdvertiserDashboard() {
   }
 
   async function fundCampaign(id: number) {
-    const amount = window.prompt("Add budget ($, min 20):", "50");
-    if (!amount) return;
+    const blocks = window.prompt("Add blocks (1 block = 1,000 views):", "10");
+    if (!blocks) return;
     try {
-      await api(`/campaigns/${id}/fund`, { method: "POST", body: JSON.stringify({ amount_usd: Number(amount) }) });
+      await api(`/campaigns/${id}/fund`, { method: "POST", body: JSON.stringify({ blocks: Number(blocks) }) });
       await load();
     } catch {
-      setMessage("Top-up failed (min $20).");
+      setMessage("Top-up failed.");
     }
   }
 
   if (!summary) return <main className="p-10 text-sm text-muted-foreground">Loading…</main>;
 
-  const price = Number(form.bid_usd) || 0; // price per 1,000 Waits
-  const budget = Number(form.budget_usd) || 0;
-  const estWaits = price > 0 ? Math.floor((budget / price) * 1000) : 0;
+  const pricePerBlock = Number(form.bid_usd) || 0; // $ per block (= per 1,000 views)
+  const blocks = Math.max(0, Math.floor(Number(form.blocks) || 0));
+  const views = blocks * VIEWS_PER_BLOCK;
+  const payment = blocks * pricePerBlock;
+  const clickCost = (pricePerBlock * CLICK_MULT) / 1000;
 
   const stats = [
     { label: "Campaigns", value: String(summary.campaigns), sub: "total" },
     { label: "Serving", value: String(summary.serving), sub: "live now" },
-    { label: "Waits", value: summary.impressions.toLocaleString("en-US"), sub: "waits served" },
+    { label: "Views", value: summary.impressions.toLocaleString("en-US"), sub: "5-sec views served" },
     { label: "Spend", value: usdFromMicros(summary.spend_micros), sub: "total spend" },
     { label: "CTR", value: `${(summary.ctr * 100).toFixed(2)}%`, sub: `${summary.clicks} clicks` },
   ];
@@ -129,7 +136,7 @@ export default function AdvertiserDashboard() {
       {/* Charts */}
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
         <AreaChart
-          label="Waits"
+          label="Views"
           data={summary.series.map((point) => ({ day: point.day, value: point.impressions }))}
           format={(value) => value.toLocaleString("en-US")}
         />
@@ -150,10 +157,10 @@ export default function AdvertiserDashboard() {
         <div className="border-b px-6 py-5">
           <h2 className="text-lg font-semibold tracking-tight">Launch a campaign</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            A <strong>Wait</strong> = your ad shown once while Claude is thinking. You set a price per
-            1,000 Waits — <strong>the more you pay, the more often your ad shows</strong>. Your budget is the
-            payment: you&apos;re charged your price ÷ 1,000 per Wait and{" "}
-            {usdFromMicros((price * CLICK_MULT * 1_000_000) / 1000) || "$0.00"} per click.
+            Each <strong>block</strong> buys 1,000 views of your ad — a view is one 5-second show while
+            Claude is thinking. <strong>More blocks = more views.</strong> A higher price per block moves you
+            up the queue so your views deliver sooner — it doesn&apos;t add views. You also pay{" "}
+            {usdFromMicros((clickCost) * 1_000_000) || "$0.00"} per click.
           </p>
         </div>
         <form onSubmit={launch} className="grid gap-5 p-6 lg:grid-cols-[1fr_300px]">
@@ -174,12 +181,12 @@ export default function AdvertiserDashboard() {
             </label>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="text-sm font-medium">
-                Price per 1,000 Waits <span className="text-muted-foreground">· min $1 · more = shown more</span>
-                <input required type="number" min={1} step="0.5" value={form.bid_usd} onChange={(e) => setForm({ ...form, bid_usd: e.target.value })} className={`${inputClass} mt-1.5 tabular-nums`} />
+                Blocks <span className="text-muted-foreground">· 1 block = 1,000 views</span>
+                <input required type="number" min={1} step="1" value={form.blocks} onChange={(e) => setForm({ ...form, blocks: e.target.value })} className={`${inputClass} mt-1.5 tabular-nums`} />
               </label>
               <label className="text-sm font-medium">
-                Budget <span className="text-muted-foreground">· min $20</span>
-                <input required type="number" min={20} step="10" value={form.budget_usd} onChange={(e) => setForm({ ...form, budget_usd: e.target.value })} className={`${inputClass} mt-1.5 tabular-nums`} />
+                Price per block <span className="text-muted-foreground">· min $1 · sets your rank</span>
+                <input required type="number" min={1} step="0.5" value={form.bid_usd} onChange={(e) => setForm({ ...form, bid_usd: e.target.value })} className={`${inputClass} mt-1.5 tabular-nums`} />
               </label>
             </div>
           </div>
@@ -188,20 +195,23 @@ export default function AdvertiserDashboard() {
           <div className="flex flex-col gap-4 rounded-xl border bg-background/50 p-5">
             <div>
               <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">Payment</p>
-              <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight">{usdFromMicros(budget * 1_000_000)}</p>
+              <p className="mt-2 text-3xl font-bold tabular-nums tracking-tight">{usdFromMicros(payment * 1_000_000)}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {blocks.toLocaleString("en-US")} {blocks === 1 ? "block" : "blocks"} × {usdFromMicros(pricePerBlock * 1_000_000)}
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div>
-                <p className="tabular-nums">{estWaits.toLocaleString("en-US")}</p>
-                <p className="text-[11px] text-muted-foreground">estimated Waits</p>
+                <p className="tabular-nums">{views.toLocaleString("en-US")}</p>
+                <p className="text-[11px] text-muted-foreground">total views</p>
               </div>
               <div>
-                <p className="tabular-nums">{usdFromMicros(price * 1_000_000)}</p>
-                <p className="text-[11px] text-muted-foreground">price / 1,000 Waits</p>
+                <p className="tabular-nums">{usdFromMicros(pricePerBlock * 1_000_000)}</p>
+                <p className="text-[11px] text-muted-foreground">per block</p>
               </div>
             </div>
             <Button type="submit" size="lg" disabled={submitting} className="mt-auto w-full font-semibold">
-              {submitting ? "Launching…" : `Launch — pay ${usdFromMicros(budget * 1_000_000)}`}
+              {submitting ? "Launching…" : `Launch — pay ${usdFromMicros(payment * 1_000_000)}`}
             </Button>
             {message && <p className="text-xs">{message}</p>}
           </div>
@@ -211,16 +221,16 @@ export default function AdvertiserDashboard() {
       {/* Campaigns table */}
       <h2 className="mt-10 text-lg font-semibold tracking-tight">Campaigns</h2>
       <div className="mt-3 overflow-x-auto rounded-xl border bg-card">
-        <Table className="min-w-[760px]">
+        <Table className="min-w-[820px]">
           <TableHeader>
             <TableRow>
               <TableHead>Campaign</TableHead>
-              <TableHead>Price / 1k Waits</TableHead>
+              <TableHead>Price / block</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="text-right">Waits</TableHead>
+              <TableHead className="text-right">Views</TableHead>
+              <TableHead className="text-right">Views left</TableHead>
               <TableHead className="text-right">Clicks</TableHead>
               <TableHead className="text-right">Spend</TableHead>
-              <TableHead className="text-right">Remaining</TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -245,17 +255,17 @@ export default function AdvertiserDashboard() {
                   />
                 </TableCell>
                 <TableCell>
-                  <Badge variant={campaign.status === "live" && campaign.remaining_micros > 0 ? "default" : "secondary"}>
-                    {campaign.remaining_micros <= 0 ? "out of budget" : campaign.status}
+                  <Badge variant={campaign.status === "live" && campaign.views_remaining > 0 ? "default" : "secondary"}>
+                    {campaign.views_remaining <= 0 ? "delivered" : campaign.status}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-right tabular-nums">{campaign.impressions.toLocaleString("en-US")}</TableCell>
+                <TableCell className="text-right tabular-nums">{campaign.views_delivered.toLocaleString("en-US")}</TableCell>
+                <TableCell className="text-right tabular-nums">{campaign.views_remaining.toLocaleString("en-US")}</TableCell>
                 <TableCell className="text-right tabular-nums">{campaign.clicks.toLocaleString("en-US")}</TableCell>
                 <TableCell className="text-right tabular-nums">{usdFromMicros(campaign.spent_micros, 4)}</TableCell>
-                <TableCell className="text-right tabular-nums">{usdFromMicros(campaign.remaining_micros)}</TableCell>
                 <TableCell>
                   <div className="flex justify-end gap-2">
-                    <Button variant="outline" size="sm" onClick={() => fundCampaign(campaign.id)}>+ Budget</Button>
+                    <Button variant="outline" size="sm" onClick={() => fundCampaign(campaign.id)}>+ Blocks</Button>
                     <Button
                       variant="outline"
                       size="sm"

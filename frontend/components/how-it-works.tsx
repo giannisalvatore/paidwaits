@@ -21,13 +21,13 @@ const DEVELOPER_STEPS = [
 const ADVERTISER_STEPS = [
   {
     step: "01",
-    title: "Launch a campaign",
-    body: "Set your ad line, bid (CPM) and budget. The budget is the payment — one click and you're live. No sales calls, no minimums beyond $20.",
+    title: "Buy blocks",
+    body: "Each block buys 1,000 views — one view is a 5-second show while Claude thinks. Pick how many blocks and your price per block. The payment is the launch — one click and you're live.",
   },
   {
     step: "02",
-    title: "Win the continuous auction",
-    body: "No 1,000-view blocks. Every impression is drawn with probability proportional to your bid. Raise it anytime; your traffic share updates instantly.",
+    title: "Climb the queue",
+    body: "A higher price per block moves you up the queue, so your views deliver sooner — it doesn't add views. Raise your price anytime to take #1. More views? Buy more blocks.",
   },
   {
     step: "03",

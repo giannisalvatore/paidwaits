@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { CLICK_MULT, DEFAULT_BID, MIN_BID, TOP_BID, trafficShare, usd } from "@/lib/marketplace";
+import { CLICK_MULT, DEFAULT_BID, MIN_BID, TOP_BID, VIEWS_PER_BLOCK, rankFor, usd } from "@/lib/marketplace";
 
 const MAX_ICON_BYTES = 64 * 1024;
 const ICON_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -20,17 +20,18 @@ export function BidPanel() {
   const [iconError, setIconError] = useState<string | null>(null);
   const [onLeaderboard, setOnLeaderboard] = useState(true);
   const [bidInput, setBidInput] = useState(DEFAULT_BID.toFixed(2));
-  const [budgetInput, setBudgetInput] = useState("50");
+  const [blocksInput, setBlocksInput] = useState("10");
   const [isDragging, setIsDragging] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const bid = Math.max(0, parseFloat(bidInput) || 0);
-  const budget = Math.max(0, parseFloat(budgetInput) || 0);
-  const views = bid > 0 ? Math.floor((budget / bid) * 1000) : 0;
-  const share = trafficShare(bid);
-  const clickCost = (bid * CLICK_MULT) / 1000;
+  const price = Math.max(0, parseFloat(bidInput) || 0); // price per block
+  const blocks = Math.max(0, Math.floor(parseFloat(blocksInput) || 0));
+  const views = blocks * VIEWS_PER_BLOCK;
+  const payment = blocks * price;
+  const rank = rankFor(price);
+  const clickCost = (price * CLICK_MULT) / 1000;
 
   function handleIconFile(file: File | undefined) {
     if (!file) return;
@@ -60,8 +61,8 @@ export function BidPanel() {
     if (adLine.trim().length < 3 || adLine.trim().length > 60)
       errs.push("Ad line must be 3–60 characters.");
     if (!/^https:\/\/.+\..+/.test(url)) errs.push("Destination URL must start with https://");
-    if (bid < MIN_BID) errs.push(`Minimum price is ${usd(MIN_BID)} per 1,000 Waits.`);
-    if (budget < 50) errs.push("Minimum budget is $50.00.");
+    if (price < MIN_BID) errs.push(`Minimum price is ${usd(MIN_BID)} per block.`);
+    if (blocks < 1) errs.push("Buy at least 1 block.");
     setErrors(errs);
     setSubmitted(errs.length === 0);
   }
@@ -69,9 +70,9 @@ export function BidPanel() {
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-4 sm:px-6">
-        <h3 className="font-semibold">Set your price</h3>
+        <h3 className="font-semibold">Buy blocks</h3>
         <p className="font-mono text-xs text-muted-foreground">
-          pay only for Waits
+          1 block = 1,000 views (5s each)
         </p>
       </div>
 
@@ -217,11 +218,23 @@ export function BidPanel() {
 
           <div className="grid gap-5 sm:grid-cols-2">
             <div>
+              <label htmlFor="bid-blocks" className="text-sm font-medium">
+                Blocks <span className="text-muted-foreground">(1 block = 1,000 views)</span>
+              </label>
+              <input
+                id="bid-blocks"
+                type="number"
+                min={1}
+                step={1}
+                value={blocksInput}
+                onChange={(e) => setBlocksInput(e.target.value)}
+                className={cn(inputClass, "mt-1.5 font-mono tabular-nums")}
+              />
+            </div>
+            <div>
               <label htmlFor="bid-amount" className="text-sm font-medium">
-                Price per 1,000 Waits{" "}
-                <span className="text-muted-foreground">
-                  (min {usd(MIN_BID)} — more = shown more)
-                </span>
+                Price per block{" "}
+                <span className="text-muted-foreground">(min {usd(MIN_BID)} — sets your rank)</span>
               </label>
               <div className="relative mt-1.5">
                 <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-muted-foreground">
@@ -238,32 +251,12 @@ export function BidPanel() {
                 />
               </div>
             </div>
-            <div>
-              <label htmlFor="bid-budget" className="text-sm font-medium">
-                Budget <span className="text-muted-foreground">(min $50, any amount)</span>
-              </label>
-              <div className="relative mt-1.5">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-muted-foreground">
-                  $
-                </span>
-                <input
-                  id="bid-budget"
-                  type="number"
-                  min={50}
-                  step={10}
-                  value={budgetInput}
-                  onChange={(e) => setBudgetInput(e.target.value)}
-                  className={cn(inputClass, "pl-7 font-mono tabular-nums")}
-                />
-              </div>
-            </div>
           </div>
 
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Continuous auction, no blocks: every impression goes to a live campaign with
-            probability proportional to its bid. You pay your bid ÷ 1,000 per impression and{" "}
-            {usd(clickCost)} per click. Raise the bid anytime — your traffic share updates
-            instantly.
+            Each block buys 1,000 views — one view is a 5-second show while Claude is thinking.
+            More blocks = more views. A higher price per block moves you up the queue so your views
+            deliver sooner — it doesn&apos;t add views. You also pay {usd(clickCost)} per click.
           </p>
         </div>
 
@@ -271,39 +264,37 @@ export function BidPanel() {
         <div className="flex flex-col gap-5 bg-background/50 p-5 sm:p-6">
           <div>
             <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-              Estimated traffic share
+              Your queue position
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {usd(bid)} CPM against today&apos;s market ≈ {(share * 100).toFixed(1)}% of all
-              impressions
+              {usd(price)} per block in today&apos;s market
             </p>
-            <p className="mt-3 text-4xl font-bold tabular-nums tracking-tight">
-              {(share * 100).toFixed(1)}%
-            </p>
+            <p className="mt-3 text-4xl font-bold tabular-nums tracking-tight">#{rank}</p>
           </div>
 
           <div className="grid grid-cols-3 gap-2 rounded-lg border border-border bg-card p-3">
             <div>
-              <p className="font-mono text-sm tabular-nums">{usd(bid)}</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">per 1,000 views</p>
-            </div>
-            <div>
-              <p className="font-mono text-sm tabular-nums">{usd(clickCost)}</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">per click</p>
+              <p className="font-mono text-sm tabular-nums">{blocks.toLocaleString("en-US")}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">blocks</p>
             </div>
             <div>
               <p className="font-mono text-sm tabular-nums">{views.toLocaleString("en-US")}</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">views your budget buys</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">total views</p>
+            </div>
+            <div>
+              <p className="font-mono text-sm tabular-nums">{usd(payment)}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">you pay</p>
             </div>
           </div>
 
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Top bid right now is {usd(TOP_BID)} CPM. Outbid it to take the biggest share — but
-            every live campaign gets traffic in proportion to its bid. No queue, no waiting.
+            Top price right now is {usd(TOP_BID)} per block — pay above it to take #1 and deliver
+            first, or any amount from {usd(MIN_BID)} to join the queue. Your price sets where you
+            rank, not how many views you get.
           </p>
 
-          {bid > TOP_BID && (
-            <p className="font-mono text-xs text-primary">This bid takes the top share</p>
+          {price > TOP_BID && (
+            <p className="font-mono text-xs text-primary">This price takes #1 in the queue</p>
           )}
 
           <div className="mt-auto flex flex-col gap-3">
@@ -318,7 +309,7 @@ export function BidPanel() {
             )}
             {submitted && (
               <p className="font-mono text-xs text-primary">
-                Bid received — demo only, payments coming soon.
+                Order received — demo only, payments coming soon.
               </p>
             )}
             <Button
@@ -326,7 +317,7 @@ export function BidPanel() {
               size="lg"
               className="w-full bg-primary font-semibold tabular-nums text-primary-foreground transition-colors duration-150 hover:bg-primary/90"
             >
-              Fund {usd(budget)} — go live
+              Fund {usd(payment)} — go live
             </Button>
           </div>
         </div>

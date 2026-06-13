@@ -38,27 +38,27 @@ export default function UserDashboard() {
     setMessage(null);
     try {
       const payout = await api<{ amount_micros: number }>("/me/payout", { method: "POST" });
-      setMessage(`Payout di ${usdFromMicros(payout.amount_micros)} richiesto.`);
+      setMessage(`Payout of ${usdFromMicros(payout.amount_micros)} requested.`);
       await load();
     } catch (error) {
-      setMessage(error instanceof Error && error.message === "below_minimum_payout" ? "Sotto la soglia minima di payout." : "Richiesta fallita.");
+      setMessage(error instanceof Error && error.message === "below_minimum_payout" ? "Below the minimum payout." : "Request failed.");
     }
   }
 
-  if (!me) return <main className="p-10 text-sm text-muted-foreground">Caricamento…</main>;
+  if (!me) return <main className="p-10 text-sm text-muted-foreground">Loading…</main>;
 
   const stats = [
-    { label: "Oggi", value: usdFromMicros(me.earned_today_micros, 4) },
-    { label: "Ultimi 30 giorni", value: usdFromMicros(me.earned_month_micros, 4) },
-    { label: "Totale guadagnato", value: usdFromMicros(me.earned_total_micros, 4) },
-    { label: "Saldo prelevabile", value: usdFromMicros(me.balance_micros, 4) },
+    { label: "Today", value: usdFromMicros(me.earned_today_micros, 4) },
+    { label: "Last 30 days", value: usdFromMicros(me.earned_month_micros, 4) },
+    { label: "Total earned", value: usdFromMicros(me.earned_total_micros, 4) },
+    { label: "Available balance", value: usdFromMicros(me.balance_micros, 4) },
   ];
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-12">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">I tuoi guadagni</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Your earnings</h1>
           <p className="mt-1 text-sm text-muted-foreground">{me.email}</p>
         </div>
         <Link href="/" className="text-sm text-muted-foreground hover:underline">← Home</Link>
@@ -75,11 +75,11 @@ export default function UserDashboard() {
 
       <div className="mt-6 flex items-center gap-4 rounded-lg border p-4">
         <div className="flex-1 text-sm">
-          <span className="font-medium">{me.impressions}</span> impression viste ·{" "}
+          <span className="font-medium">{me.impressions}</span> views watched ·{" "}
           {me.earning_device ? (
-            <Badge variant="secondary">earning su {me.earning_device}</Badge>
+            <Badge variant="secondary">earning on {me.earning_device}</Badge>
           ) : (
-            <span className="text-muted-foreground">nessuna sessione earning attiva</span>
+            <span className="text-muted-foreground">no earning session active</span>
           )}
         </div>
         <Button onClick={cashOut} disabled={me.balance_micros < me.min_payout_micros}>

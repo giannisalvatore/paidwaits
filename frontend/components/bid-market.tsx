@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { BidPanel } from "@/components/bid-panel";
-import { BIDS, TOTAL_BID, usd } from "@/lib/marketplace";
+import { BIDS, usd } from "@/lib/marketplace";
 
 const IMPRESSIONS_BASE = 14_203_118;
 
@@ -37,14 +37,14 @@ export function BidMarket() {
           <p className="font-mono text-sm tabular-nums text-primary">
             {impressions.toLocaleString("en-US")}
           </p>
-          <p className="font-mono text-sm text-muted-foreground">Waits served today</p>
+          <p className="font-mono text-sm text-muted-foreground">5-second views served today</p>
         </div>
 
         <p className="mt-10 font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          For advertisers · pay per Wait
+          For advertisers · 1 block = 1,000 views
         </p>
         <h2 className="mt-3 max-w-2xl text-balance text-3xl font-bold tracking-tight sm:text-4xl">
-          Fill the most-watched loading state on the internet. Pay more, show more.
+          Buy blocks of the most-watched loading state on the internet.
         </h2>
 
         <div className="mt-12">
@@ -65,13 +65,10 @@ export function BidMarket() {
                   Campaign
                 </TableHead>
                 <TableHead className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                  Price / 1k Waits
+                  Price / block
                 </TableHead>
                 <TableHead className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                  Share of Waits
-                </TableHead>
-                <TableHead className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-                  Waits
+                  Views
                 </TableHead>
                 <TableHead className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
                   Status
@@ -101,11 +98,8 @@ export function BidMarket() {
                     </div>
                   </TableCell>
                   <TableCell className="font-mono text-sm tabular-nums">{usd(bid.bid)}</TableCell>
-                  <TableCell className="font-mono text-sm tabular-nums">
-                    {((bid.bid / TOTAL_BID) * 100).toFixed(1)}%
-                  </TableCell>
                   <TableCell className="font-mono text-sm tabular-nums text-muted-foreground">
-                    {bid.impressions}
+                    {bid.views}
                   </TableCell>
                   <TableCell>
                     <span
