@@ -1,0 +1,49 @@
+{
+  "name": "waitingads",
+  "displayName": "WaitingAds — Get paid for waiting",
+  "description": "Sostituisce l'attesa di Claude Code con ads. Il 50% del ricavo delle impression va a te.",
+  "version": "0.1.0",
+  "private": true,
+  "publisher": "waitingads",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "waitingads.connect", "title": "Paidwaits: Connect account" },
+      { "command": "waitingads.restore", "title": "Paidwaits: Restore Claude Code (uninstall ads)" },
+      { "command": "waitingads.status", "title": "Paidwaits: Earnings status" }
+    ],
+    "configuration": [
+      {
+        "title": "Paidwaits",
+        "properties": {
+          "waitingads.apiUrl": {
+            "type": "string",
+            "default": "http://localhost:4100",
+            "description": "URL del backend Paidwaits"
+          },
+          "waitingads.loopbackPort": {
+            "type": "number",
+            "default": 48100,
+            "description": "Porta locale del ponte tra il webview di Claude Code e l'estensione"
+          }
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "watch": "npm run build -- --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "@types/vscode": "^1.90.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.3"
+  }
+}

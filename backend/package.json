@@ -1,0 +1,21 @@
+{
+  "name": "waitingads-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch --env-file-if-exists=.env src/index.js",
+    "start": "node --env-file-if-exists=.env src/index.js",
+    "migrate": "node --env-file-if-exists=.env src/migrate.js"
+  },
+  "dependencies": {
+    "@koa/bodyparser": "^5.1.1",
+    "@koa/cors": "^5.0.0",
+    "@koa/router": "^13.1.0",
+    "google-auth-library": "^9.14.1",
+    "koa": "^2.15.3",
+    "koa-helmet": "^8.0.1",
+    "koa-session": "^7.0.2",
+    "mysql2": "^3.11.3"
+  }
+}
