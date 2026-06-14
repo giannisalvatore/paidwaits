@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Paidwaits — AI thinks. Get paid for waiting.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+/* =========================================================
+   PAIDWAITS — Landing redesign · "The Futur" editorial style
+   Single-file prototype. Black + bone + Claude terracotta.
+   ========================================================= */
+
+:root{
+  --ink:#0E0E0D;
+  --ink-soft:#1A1917;
+  --paper:#F4F1EA;
+  --paper-2:#ECE7DC;
+  --white:#FFFFFF;
+  --accent:#D97757;
+  --accent-deep:#C2593A;
+  --muted:#6B6862;
+  --muted-dark:#9A958B;
+  --line:rgba(14,14,13,.14);
+  --line-2:rgba(14,14,13,.08);
+  --line-dark:rgba(255,255,255,.14);
+  --term:#161514;
+  --green:#5BAE7E;
+
+  --f-display:'Space Grotesk',-apple-system,system-ui,sans-serif;
+  --f-body:'Inter',-apple-system,system-ui,sans-serif;
+  --f-mono:'JetBrains Mono',ui-monospace,monospace;
+
+  --maxw:1240px;
+  --gut:clamp(20px,5vw,80px);
+}
+
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{
+  font-family:var(--f-body);
+  background:var(--paper);
+  color:var(--ink);
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+  overflow-x:hidden;
+}
+a{color:inherit;text-decoration:none}
+img,svg{display:block}
+::selection{background:var(--accent);color:#fff}
+
+.wrap{max-width:var(--maxw);margin:0 auto;padding-inline:var(--gut)}
+.mono{font-family:var(--f-mono)}
+
+/* eyebrow / section label */
+.eyebrow{
+  font-family:var(--f-mono);
+  font-size:12px;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:var(--muted);
+  display:flex;align-items:center;gap:12px;
+}
+.eyebrow .idx{color:var(--accent)}
+.rule{height:1px;background:var(--line);border:0;width:100%}
+
+/* buttons */
+.btn{
+  font-family:var(--f-mono);
+  font-size:13px;letter-spacing:.04em;text-transform:uppercase;font-weight:500;
+  display:inline-flex;align-items:center;gap:10px;
+  padding:16px 26px;border:1px solid var(--ink);border-radius:0;
+  background:var(--ink);color:var(--paper);
+  cursor:pointer;transition:transform .18s ease, background .18s ease, color .18s ease;
+  white-space:nowrap;
+}
+.btn:hover{background:var(--accent);border-color:var(--accent);color:#fff;transform:translateY(-2px)}
+.btn .arr{transition:transform .18s ease}
+.btn:hover .arr{transform:translate(3px,-3px)}
+.btn--ghost{background:transparent;color:var(--ink)}
+.btn--ghost:hover{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+.btn--accent{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn--accent:hover{background:var(--accent-deep);border-color:var(--accent-deep)}
+.btn--on-dark{background:var(--paper);border-color:var(--paper);color:var(--ink)}
+.btn--on-dark:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn--ghost-dark{background:transparent;border-color:var(--line-dark);color:var(--paper)}
+.btn--ghost-dark:hover{background:var(--paper);color:var(--ink);border-color:var(--paper)}
+
+/* =================== TOP TICKER =================== */
+.ticker{background:var(--ink);color:var(--paper);overflow:hidden;border-bottom:1px solid var(--ink)}
+.ticker__track{display:flex;gap:0;white-space:nowrap;animation:marquee 38s linear infinite;will-change:transform}
+.ticker span{font-family:var(--f-mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;padding:9px 28px;display:inline-flex;align-items:center;gap:28px}
+.ticker .dot{color:var(--accent)}
+@keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* =================== NAV =================== */
+.nav{position:sticky;top:0;z-index:50;background:rgba(244,241,234,.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.nav__in{display:flex;align-items:center;justify-content:space-between;height:72px}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--f-display);font-weight:700;font-size:20px;letter-spacing:-.02em}
+.brand .reg{font-size:11px;vertical-align:super;color:var(--muted)}
+.brand .live{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(217,119,87,.18);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.nav__links{display:flex;align-items:center;gap:30px}
+.nav__links a{font-family:var(--f-mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);transition:color .15s}
+.nav__links a:hover{color:var(--ink)}
+.nav__cta{display:flex;align-items:center;gap:12px}
+.nav__cta .btn{padding:12px 20px}
+@media(max-width:900px){.nav__links{display:none}.nav__cta .btn--ghost{display:none}}
+
+/* =================== HERO =================== */
+.hero{padding-top:clamp(40px,6vw,80px);padding-bottom:clamp(36px,4vw,56px)}
+.hero__meta{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap;margin-bottom:26px}
+.hero__meta .right{font-family:var(--f-mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.hero__meta .right b{color:var(--accent);font-weight:500}
+.hero h1{
+  font-family:var(--f-display);font-weight:700;
+  font-size:clamp(3.1rem,11vw,9.2rem);
+  line-height:.9;letter-spacing:-.045em;
+  margin:28px 0 0;
+}
+.hero h1 .stroke{
+  -webkit-text-stroke:2px var(--ink);
+  -webkit-text-fill-color:transparent;
+  color:transparent;
+}
+.hero h1 .accent{color:var(--accent)}
+.hero__grid{display:grid;grid-template-columns:1fr 1.02fr;gap:clamp(28px,5vw,72px);align-items:end;margin-top:clamp(40px,5vw,64px)}
+.hero__lead{max-width:30ch;font-size:clamp(17px,1.4vw,20px);color:var(--ink);line-height:1.55}
+.hero__lead b{font-weight:600}
+.hero__cta{display:flex;gap:14px;margin-top:32px;flex-wrap:wrap}
+.hero__trust{margin-top:30px;display:flex;flex-wrap:wrap;gap:8px 22px}
+.hero__trust span{font-family:var(--f-mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:8px}
+.hero__trust span::before{content:"";width:5px;height:5px;background:var(--accent);border-radius:50%}
+@media(max-width:860px){.hero__grid{grid-template-columns:1fr;align-items:start}.hero h1{margin-top:18px}}
+
+/* terminal demo */
+.term{background:var(--term);border:1px solid rgba(0,0,0,.4);box-shadow:0 40px 80px -30px rgba(0,0,0,.5);overflow:hidden;width:100%}
+.term__bar{display:flex;align-items:center;gap:8px;padding:13px 16px;border-bottom:1px solid rgba(255,255,255,.06)}
+.term__bar i{width:11px;height:11px;border-radius:50%;display:block}
+.term__bar .r{background:#ff5f57}.term__bar .y{background:#febc2e}.term__bar .g{background:#28c840}
+.term__bar .t{margin-left:8px;font-family:var(--f-mono);font-size:11px;color:#6b6862}
+.term__body{padding:20px 18px 22px}
+.term__label{font-family:var(--f-mono);font-size:10px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;margin-bottom:10px}
+.term__label.before{color:var(--accent)}
+.term__label.after{color:var(--accent)}
+.term__row{display:flex;align-items:center;justify-content:space-between;gap:12px;height:46px;padding:0 14px;border:1px solid rgba(255,255,255,.07);background:rgba(255,255,255,.025);font-family:var(--f-mono);font-size:13px}
+.term__row .l{display:flex;align-items:center;gap:10px;min-width:0}
+.term__glyph{width:16px;text-align:center;color:var(--accent)}
+.term__logo{width:18px;height:18px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
+.term__brand{color:#ececec}.term__tag{color:#7fc7e6}
+.term__time{color:#5a5852;font-size:12px;flex-shrink:0}
+.term__credits{display:flex;align-items:center;justify-content:space-between;margin-top:11px;font-family:var(--f-mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#5a5852}
+.term__credits .v{font-size:11px}
+.term__credits .pos{color:var(--accent)}
+.term__chev{display:flex;justify-content:center;color:var(--accent);margin:14px 0}
+.fade{animation:fade .4s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* brand marquee under hero */
+.brands{border-top:1px solid var(--line);border-bottom:1px solid var(--line);overflow:hidden;background:var(--paper)}
+.brands__in{display:flex;align-items:center}
+.brands__lab{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);padding:0 28px 0 var(--gut);flex-shrink:0;white-space:nowrap;border-right:1px solid var(--line);align-self:stretch;display:flex;align-items:center}
+.brands__track{display:flex;gap:54px;white-space:nowrap;animation:marquee 30s linear infinite;padding:18px 54px}
+.brands__track b{font-family:var(--f-display);font-weight:600;font-size:22px;color:var(--ink);opacity:.55;letter-spacing:-.01em}
+
+/* =================== STATS BAND =================== */
+.stats{background:var(--ink);color:var(--paper)}
+.stats__grid{display:grid;grid-template-columns:repeat(4,1fr)}
+.stat{padding:clamp(34px,4vw,60px) clamp(20px,2.4vw,40px);border-right:1px solid var(--line-dark)}
+.stat:last-child{border-right:0}
+.stat__n{font-family:var(--f-display);font-weight:700;font-size:clamp(2.4rem,4.6vw,4rem);letter-spacing:-.04em;line-height:1}
+.stat__n .u{color:var(--accent)}
+.stat__l{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted-dark);margin-top:14px}
+@media(max-width:760px){.stats__grid{grid-template-columns:1fr 1fr}.stat:nth-child(2){border-right:0}.stat:nth-child(1),.stat:nth-child(2){border-bottom:1px solid var(--line-dark)}}
+
+/* =================== SECTION SHELL =================== */
+.section{padding:clamp(72px,9vw,140px) 0}
+.section__head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap;margin-bottom:14px}
+.section h2{font-family:var(--f-display);font-weight:700;font-size:clamp(2rem,5.2vw,4.2rem);letter-spacing:-.04em;line-height:.98;max-width:16ch}
+.section__sub{max-width:46ch;color:var(--muted);font-size:clamp(15px,1.2vw,17px);margin-top:26px}
+
+/* how it works — two tracks */
+.tracks{display:grid;grid-template-columns:1fr 1fr;gap:0;margin-top:clamp(40px,5vw,72px);border-top:1px solid var(--line)}
+.track{padding:clamp(28px,3vw,48px) 0}
+.track:first-child{padding-right:clamp(24px,4vw,64px);border-right:1px solid var(--line)}
+.track:last-child{padding-left:clamp(24px,4vw,64px)}
+.track__lab{font-family:var(--f-mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink);display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.track__lab .tag{background:var(--accent);color:#fff;font-size:10px;padding:3px 8px;letter-spacing:.1em}
+.step{display:grid;grid-template-columns:auto 1fr;gap:22px;padding:28px 0;border-bottom:1px solid var(--line-2)}
+.step__n{font-family:var(--f-display);font-weight:700;font-size:clamp(1.7rem,2.6vw,2.4rem);letter-spacing:-.03em;color:var(--accent);line-height:1}
+.step h3{font-family:var(--f-display);font-weight:600;font-size:19px;letter-spacing:-.01em;margin-bottom:7px}
+.step p{font-size:14.5px;color:var(--muted);line-height:1.6;max-width:42ch}
+.track__cta{margin-top:30px;display:inline-flex;align-items:center;gap:10px;font-family:var(--f-mono);font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink);border-bottom:1px solid var(--ink);padding-bottom:4px;transition:gap .18s,color .18s}
+.track__cta:hover{gap:16px;color:var(--accent);border-color:var(--accent)}
+@media(max-width:820px){.tracks{grid-template-columns:1fr}.track:first-child{padding-right:0;border-right:0;border-bottom:1px solid var(--line)}.track:last-child{padding-left:0}}
+
+/* =================== MARKETPLACE =================== */
+.market{background:var(--paper-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.market__live{display:flex;align-items:center;gap:12px;margin-bottom:28px}
+.market__live .d{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 5px rgba(217,119,87,.16);animation:pulse 1.6s ease-in-out infinite}
+.market__live .n{font-family:var(--f-mono);font-size:15px;font-weight:500;color:var(--accent);font-variant-numeric:tabular-nums}
+.market__live .x{font-family:var(--f-mono);font-size:13px;color:var(--muted)}
+
+.board{margin-top:clamp(36px,4vw,56px);border:1px solid var(--ink);background:var(--white)}
+.board__head,.board__row{display:grid;grid-template-columns:48px 1fr 130px 110px 110px;align-items:center;gap:12px;padding:16px 24px}
+.board__head{border-bottom:1px solid var(--ink);background:var(--ink);color:var(--paper)}
+.board__head span{font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase}
+.board__row{border-bottom:1px solid var(--line-2);transition:background .15s}
+.board__row:last-child{border-bottom:0}
+.board__row:hover{background:var(--paper)}
+.board__rank{font-family:var(--f-mono);font-size:14px;color:var(--muted);font-variant-numeric:tabular-nums}
+.board__camp{display:flex;align-items:center;gap:14px}
+.board__logo{width:30px;height:30px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+.board__name{font-weight:600;font-size:15px}
+.board__cell{font-family:var(--f-mono);font-size:14px;font-variant-numeric:tabular-nums}
+.board__cell.muted{color:var(--muted)}
+.board__status{font-family:var(--f-mono);font-size:12px;display:flex;align-items:center;gap:7px;text-transform:uppercase;letter-spacing:.06em}
+.board__status.live{color:var(--green)}
+.board__status.live .b{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 1.4s infinite}
+.board__status.paused{color:var(--muted)}
+@media(max-width:760px){
+  .board{overflow-x:auto}
+  .board__head,.board__row{grid-template-columns:40px 1fr 100px 90px 90px;min-width:540px}
+}
+
+/* bid panel */
+.bidp{display:grid;grid-template-columns:1.3fr 1fr;gap:0;margin-top:clamp(32px,4vw,52px);border:1px solid var(--ink)}
+.bidp__form{padding:clamp(28px,3vw,44px);border-right:1px solid var(--ink)}
+.bidp__form h3{font-family:var(--f-display);font-weight:700;font-size:clamp(1.4rem,2.4vw,2rem);letter-spacing:-.03em;margin-bottom:8px}
+.bidp__form p{color:var(--muted);font-size:14px;margin-bottom:26px;max-width:40ch}
+.field{margin-bottom:20px}
+.field label{font-family:var(--f-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);display:block;margin-bottom:8px}
+.field .ctrl{display:flex;align-items:center;border:1px solid var(--line);background:var(--white);padding:13px 16px;font-family:var(--f-mono);font-size:15px;justify-content:space-between}
+.field .ctrl .pre{color:var(--muted)}
+.field .ctrl input{border:0;background:transparent;font-family:var(--f-mono);font-size:15px;width:100%;outline:none;color:var(--ink)}
+.bidp__sum{background:var(--ink);color:var(--paper);padding:clamp(28px,3vw,44px);display:flex;flex-direction:column}
+.bidp__sum .lab{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted-dark)}
+.sum-row{display:flex;justify-content:space-between;align-items:baseline;padding:14px 0;border-bottom:1px solid var(--line-dark);font-family:var(--f-mono);font-size:14px}
+.sum-row .k{color:var(--muted-dark)}
+.sum-row .v{font-variant-numeric:tabular-nums}
+.bidp__total{margin-top:auto;padding-top:24px}
+.bidp__total .big{font-family:var(--f-display);font-weight:700;font-size:clamp(2.2rem,4vw,3.2rem);letter-spacing:-.04em;line-height:1}
+.bidp__total .big .c{color:var(--accent)}
+.bidp__sum .btn{margin-top:22px;width:100%;justify-content:center}
+@media(max-width:760px){.bidp{grid-template-columns:1fr}.bidp__form{border-right:0;border-bottom:1px solid var(--ink)}}
+
+/* =================== MANIFESTO / MOAT =================== */
+.moat{background:var(--ink);color:var(--paper)}
+.moat__big{font-family:var(--f-display);font-weight:700;font-size:clamp(2.2rem,6vw,5.2rem);letter-spacing:-.04em;line-height:1.0;max-width:18ch;margin-top:30px}
+.moat__big .o{-webkit-text-stroke:1.5px var(--paper);-webkit-text-fill-color:transparent;color:transparent}
+.moat__big .a{color:var(--accent)}
+.pillars{display:grid;grid-template-columns:repeat(4,1fr);margin-top:clamp(50px,6vw,90px);border-top:1px solid var(--line-dark)}
+.pillar{padding:32px 24px 32px 0;border-right:1px solid var(--line-dark)}
+.pillar:last-child{border-right:0;padding-right:0}
+.pillar .pn{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;color:var(--accent)}
+.pillar h4{font-family:var(--f-display);font-weight:600;font-size:17px;margin:16px 0 8px;letter-spacing:-.01em}
+.pillar p{font-size:13.5px;color:var(--muted-dark);line-height:1.55}
+@media(max-width:820px){.pillars{grid-template-columns:1fr 1fr;gap:0}.pillar{padding:28px 24px}.pillar:nth-child(odd){border-right:1px solid var(--line-dark)}.pillar:nth-child(even){border-right:0}.pillar:nth-child(1),.pillar:nth-child(2){border-bottom:1px solid var(--line-dark)}}
+@media(max-width:520px){.pillars{grid-template-columns:1fr}.pillar{border-right:0!important;border-bottom:1px solid var(--line-dark)}.pillar:last-child{border-bottom:0}}
+
+/* =================== FINAL CTA =================== */
+.cta{background:var(--accent);color:#fff;text-align:center;padding:clamp(80px,12vw,180px) var(--gut)}
+.cta .eyebrow{justify-content:center;color:rgba(255,255,255,.7)}
+.cta .eyebrow .idx{color:#fff}
+.cta h2{font-family:var(--f-display);font-weight:700;font-size:clamp(2.8rem,10vw,8rem);letter-spacing:-.045em;line-height:.92;margin:24px 0 0}
+.cta p{max-width:34ch;margin:26px auto 0;font-size:clamp(16px,1.4vw,19px);color:rgba(255,255,255,.9)}
+.cta__btns{display:flex;gap:16px;justify-content:center;margin-top:42px;flex-wrap:wrap}
+.cta .btn--on-dark{background:#fff;border-color:#fff;color:var(--ink)}
+.cta .btn--on-dark:hover{background:var(--ink);border-color:var(--ink);color:#fff}
+.cta .btn--ghost-dark{border-color:rgba(255,255,255,.55);color:#fff}
+.cta .btn--ghost-dark:hover{background:#fff;color:var(--accent);border-color:#fff}
+
+/* =================== FOOTER =================== */
+.foot{background:var(--ink);color:var(--paper);padding-top:clamp(56px,7vw,96px)}
+.foot__top{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:32px;padding-bottom:56px;border-bottom:1px solid var(--line-dark)}
+.foot__brand .b{font-family:var(--f-display);font-weight:700;font-size:24px;letter-spacing:-.02em}
+.foot__brand p{color:var(--muted-dark);font-size:14px;max-width:32ch;margin-top:16px;line-height:1.6}
+.foot__col h5{font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted-dark);margin-bottom:18px}
+.foot__col a{display:block;font-size:14.5px;color:var(--paper);opacity:.82;padding:6px 0;transition:opacity .15s,color .15s}
+.foot__col a:hover{opacity:1;color:var(--accent)}
+.foot__word{font-family:var(--f-display);font-weight:700;font-size:clamp(3.5rem,18vw,15rem);letter-spacing:-.05em;line-height:.8;padding:clamp(30px,5vw,64px) 0 14px;white-space:nowrap}
+.foot__word .a{color:var(--accent)}
+.foot__bottom{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;padding:24px 0 40px;border-top:1px solid var(--line-dark);font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted-dark)}
+@media(max-width:820px){.foot__top{grid-template-columns:1fr 1fr}.foot__brand{grid-column:1/-1}}
+@media(max-width:480px){.foot__top{grid-template-columns:1fr}}
+
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<!-- ============ TOP TICKER ============ -->
+<div class="ticker" aria-hidden="true">
+  <div class="ticker__track" id="ticker">
+    <span><b class="dot">✦</b> Get paid for waiting <b class="dot">✦</b> 50% revenue share <b class="dot">✦</b> Verified human attention <b class="dot">✦</b> Built for Claude Code <b class="dot">✦</b> No bots · nothing read · nothing sold <b class="dot">✦</b> The attention layer for AI dev tools</span>
+    <span><b class="dot">✦</b> Get paid for waiting <b class="dot">✦</b> 50% revenue share <b class="dot">✦</b> Verified human attention <b class="dot">✦</b> Built for Claude Code <b class="dot">✦</b> No bots · nothing read · nothing sold <b class="dot">✦</b> The attention layer for AI dev tools</span>
+  </div>
+</div>
+
+<!-- ============ NAV ============ -->
+<header class="nav">
+  <div class="wrap nav__in">
+    <a href="#" class="brand">Paidwaits<span class="reg">®</span></a>
+    <nav class="nav__links">
+      <a href="#mechanism">How it works</a>
+      <a href="#market">For advertisers</a>
+      <a href="#moat">The moat</a>
+    </nav>
+    <div class="nav__cta">
+      <a href="#market" class="btn btn--ghost">Advertise</a>
+      <a href="#install" class="btn">Install extension</a>
+    </div>
+  </div>
+</header>
+
+<!-- ============ HERO ============ -->
+<section class="hero wrap">
+  <div class="hero__meta">
+    <div class="eyebrow"><span class="idx">( 01 )</span> The attention layer for AI dev tools</div>
+    <div class="right">Est. 2026 — Built for <b>Claude Code ✦</b></div>
+  </div>
+  <hr class="rule" />
+
+  <h1>
+    AI thinks.<br>
+    <span class="accent">You get paid</span><br>
+    for <span class="stroke">waiting.</span>
+  </h1>
+
+  <div class="hero__grid">
+    <div>
+      <p class="hero__lead">We turned the seconds you spend watching Claude Code think into an <b>ad marketplace</b>. Every 5-second view is a verified human — and <b>50% of the spend is yours</b>.</p>
+      <div class="hero__cta">
+        <a href="#install" class="btn">Install VS Code extension <span class="arr">↗</span></a>
+        <a href="#market" class="btn btn--ghost">Advertise</a>
+      </div>
+      <div class="hero__trust">
+        <span>Anti-bot first</span>
+        <span>Prompts never read</span>
+        <span>No data sold</span>
+      </div>
+    </div>
+
+    <!-- live terminal demo -->
+    <div class="term" id="demo">
+      <div class="term__bar"><i class="r"></i><i class="y"></i><i class="g"></i><span class="t">claude code — zsh</span></div>
+      <div class="term__body">
+        <div>
+          <div class="term__label before">Claude Code</div>
+          <div class="term__row">
+            <span class="l"><span class="term__glyph" id="glyph">✶</span><span style="color:var(--accent)" id="word">Pondering…</span></span>
+            <span class="term__time">Write · <span id="t1">2.3</span>s</span>
+          </div>
+          <div class="term__credits"><span>Credits</span><span class="v">$0.00</span></div>
+        </div>
+        <div class="term__chev">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transform:rotate(90deg)"><path d="m7 6 6 6-6 6"/><path d="m13 6 6 6-6 6"/></svg>
+        </div>
+        <div>
+          <div class="term__label after">With Paidwaits</div>
+          <div class="term__row">
+            <span class="l"><span class="term__logo" id="adlogo" style="background:#fbbf24;color:#000">R</span><span id="adtext"><span class="term__brand">Ramp</span><span class="term__tag"> · save time and money.</span></span></span>
+            <span class="term__time">Write · <span id="t2">2.3</span>s</span>
+          </div>
+          <div class="term__credits"><span>Credits</span><span class="v pos" id="credits">+$0.05</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ BRAND MARQUEE ============ -->
+<div class="brands" aria-hidden="true">
+  <div class="brands__in">
+    <span class="brands__lab">Served mid-build to</span>
+    <div class="brands__track">
+      <b>Ramp</b><b>Linear</b><b>Vercel</b><b>Sentry</b><b>Supabase</b><b>Resend</b><b>Neon</b><b>Clerk</b>
+      <b>Ramp</b><b>Linear</b><b>Vercel</b><b>Sentry</b><b>Supabase</b><b>Resend</b><b>Neon</b><b>Clerk</b>
+    </div>
+  </div>
+</div>
+
+<!-- ============ STATS ============ -->
+<section class="stats">
+  <div class="wrap" style="padding-inline:0">
+    <div class="stats__grid">
+      <div class="stat" style="padding-left:var(--gut)">
+        <div class="stat__n">50<span class="u">%</span></div>
+        <div class="stat__l">Of every impression → you</div>
+      </div>
+      <div class="stat">
+        <div class="stat__n">$2.50</div>
+        <div class="stat__l">Per 1,000 views earned</div>
+      </div>
+      <div class="stat">
+        <div class="stat__n">5<span class="u">s</span></div>
+        <div class="stat__l">Per view · attention guaranteed</div>
+      </div>
+      <div class="stat" style="padding-right:var(--gut)">
+        <div class="stat__n">1<span class="u">/</span>human</div>
+        <div class="stat__l">Earning session · no farming</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MECHANISM / HOW IT WORKS ============ -->
+<section class="section" id="mechanism">
+  <div class="wrap">
+    <div class="section__head">
+      <div>
+        <div class="eyebrow"><span class="idx">( 02 )</span> The mechanism</div>
+        <h2 style="margin-top:22px">A marketplace for the seconds you already spend waiting.</h2>
+      </div>
+      <p class="section__sub">Developers monetize their attention. Advertisers buy the highest-intent inventory in software. We keep 50% and align everyone around real, verified human views.</p>
+    </div>
+
+    <div class="tracks">
+      <div class="track">
+        <div class="track__lab"><span class="tag">For devs</span> You earn</div>
+        <div class="step"><div class="step__n">01</div><div><h3>Install &amp; sign in</h3><p>Add the VS Code extension and connect with Google. One verified human, one earning session — no bots, no multi-account farming.</p></div></div>
+        <div class="step"><div class="step__n">02</div><div><h3>Code like always</h3><p>When Claude thinks, the native spinner becomes a sponsored line — same place, same style. Nothing interrupts your flow, and your prompts are never read.</p></div></div>
+        <div class="step"><div class="step__n">03</div><div><h3>Get paid to wait</h3><p>Every 5-second view credits your balance. 50% of the ad spend is yours. Cash out from your dashboard above $20.</p></div></div>
+        <a href="#install" class="track__cta">Start earning →</a>
+      </div>
+
+      <div class="track">
+        <div class="track__lab"><span class="tag">For ads</span> You reach</div>
+        <div class="step"><div class="step__n">01</div><div><h3>Buy blocks</h3><p>Each block buys 1,000 views — one view is a 5-second show while Claude thinks. Pick how many blocks and your price per block. The payment is the launch: one click and you're live.</p></div></div>
+        <div class="step"><div class="step__n">02</div><div><h3>Climb the queue</h3><p>A higher price per block moves you up the queue, so your views deliver sooner — it doesn't add views. Raise your price anytime to take #1. More views? Buy more blocks.</p></div></div>
+        <div class="step"><div class="step__n">03</div><div><h3>Reach verified developers</h3><p>Your ad shows only to authenticated humans, mid-build, fully attentive. Premium intent the display networks can't match.</p></div></div>
+        <a href="#market" class="track__cta">Launch a campaign →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MARKETPLACE ============ -->
+<section class="section market" id="market">
+  <div class="wrap">
+    <div class="market__live">
+      <span class="d"></span>
+      <span class="n" id="views">14,203,118</span>
+      <span class="x">5-second views served today</span>
+    </div>
+
+    <div class="section__head">
+      <div>
+        <div class="eyebrow"><span class="idx">( 03 )</span> The marketplace · 1 block = 1,000 views</div>
+        <h2 style="margin-top:22px">Buy blocks of the most-watched loading state on the internet.</h2>
+      </div>
+      <p class="section__sub">One price lever, fully transparent. Raise your price per block to climb the queue and deliver sooner. The live leaderboard shows exactly who's on top.</p>
+    </div>
+
+    <!-- bid panel -->
+    <div class="bidp">
+      <div class="bidp__form">
+        <h3>Launch a campaign</h3>
+        <p>Set your price per block and how many blocks to buy. Paying is launching.</p>
+        <div class="field"><label>Campaign name</label><div class="ctrl"><input value="Acme — ship faster" /></div></div>
+        <div class="field"><label>Price per block</label><div class="ctrl"><span class="pre">$</span><input id="price" value="6.00" inputmode="decimal" /><span class="pre">/ 1k views</span></div></div>
+        <div class="field"><label>Blocks</label><div class="ctrl"><input id="blocks" value="25" inputmode="numeric" /><span class="pre">× 1,000</span></div></div>
+      </div>
+      <div class="bidp__sum">
+        <span class="lab">Order summary</span>
+        <div class="sum-row"><span class="k">Views purchased</span><span class="v" id="sViews">25,000</span></div>
+        <div class="sum-row"><span class="k">Price / block</span><span class="v" id="sPrice">$6.00</span></div>
+        <div class="sum-row"><span class="k">Current #1 bid</span><span class="v">$25.00</span></div>
+        <div class="bidp__total">
+          <span class="lab">Total — pay to go live</span>
+          <div class="big"><span class="c">$</span><span id="sTotal">150.00</span></div>
+          <a href="#" class="btn btn--on-dark">Launch — pay $<span id="bTotal">150.00</span> ↗</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- leaderboard -->
+    <div style="margin-top:clamp(40px,5vw,72px)">
+      <div class="eyebrow"><span class="idx">●</span> Live leaderboard</div>
+    </div>
+    <div class="board">
+      <div class="board__head">
+        <span>#</span><span>Campaign</span><span>Price / block</span><span>Views</span><span>Status</span>
+      </div>
+      <div class="board__row">
+        <span class="board__rank">1</span>
+        <span class="board__camp"><span class="board__logo" style="background:#fbbf24;color:#000">R</span><span class="board__name">Ramp</span></span>
+        <span class="board__cell">$25.00</span>
+        <span class="board__cell muted">312k</span>
+        <span class="board__status live"><span class="b"></span>Live</span>
+      </div>
+      <div class="board__row">
+        <span class="board__rank">2</span>
+        <span class="board__camp"><span class="board__logo" style="background:#6366f1;color:#fff">L</span><span class="board__name">Linear</span></span>
+        <span class="board__cell">$3.80</span>
+        <span class="board__cell muted">88k</span>
+        <span class="board__status live"><span class="b"></span>Live</span>
+      </div>
+      <div class="board__row">
+        <span class="board__rank">3</span>
+        <span class="board__camp"><span class="board__logo" style="background:#fff;color:#000;border:1px solid #ddd">▲</span><span class="board__name">Vercel</span></span>
+        <span class="board__cell">$2.50</span>
+        <span class="board__cell muted">61k</span>
+        <span class="board__status live"><span class="b"></span>Live</span>
+      </div>
+      <div class="board__row">
+        <span class="board__rank">4</span>
+        <span class="board__camp"><span class="board__logo" style="background:#1f2937;color:#fff">S</span><span class="board__name">Sentry</span></span>
+        <span class="board__cell">$1.20</span>
+        <span class="board__cell muted">9k</span>
+        <span class="board__status paused">Paused</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MOAT / MANIFESTO ============ -->
+<section class="section moat" id="moat">
+  <div class="wrap">
+    <div class="eyebrow" style="color:var(--muted-dark)"><span class="idx" style="color:var(--accent)">( 04 )</span> The moat</div>
+    <p class="moat__big">Every view is a <span class="a">verified human</span>, mid-build, fully present. <span class="o">Nothing read.</span> Nothing sold.</p>
+
+    <div class="pillars">
+      <div class="pillar"><div class="pn">01 / Identity</div><h4>Anti-bot first</h4><p>Google OAuth only. One account is one real Google identity — fake-account farms become uneconomical.</p></div>
+      <div class="pillar"><div class="pn">02 / Sessions</div><h4>One human, one session</h4><p>You earn from a single active session at a time. No multi-window, multi-machine farming.</p></div>
+      <div class="pillar"><div class="pn">03 / Privacy</div><h4>Prompts never read</h4><p>The extension sees only start/stop of thinking — never the content of your conversations. Open source.</p></div>
+      <div class="pillar"><div class="pn">04 / Quality</div><h4>Verified attention</h4><p>Impressions tie to real, verified thinking events — sold as what it is: verified human developers.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FINAL CTA ============ -->
+<section class="cta" id="install">
+  <div class="eyebrow"><span class="idx">( 05 )</span> Make Claude Code pay for itself</div>
+  <h2>Get paid<br>to wait.</h2>
+  <p>Install the extension, keep coding, and let the seconds you already spend waiting earn their keep.</p>
+  <div class="cta__btns">
+    <a href="#" class="btn btn--on-dark">Install VS Code extension ↗</a>
+    <a href="#market" class="btn btn--ghost-dark">I'm an advertiser</a>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer class="foot">
+  <div class="wrap">
+    <div class="foot__top">
+      <div class="foot__brand">
+        <div class="b">Paidwaits<span style="color:var(--accent)">®</span></div>
+        <p>The attention layer for AI dev tools. We turn Claude Code's thinking time into a verified ad marketplace — and give half back.</p>
+      </div>
+      <div class="foot__col">
+        <h5>Product</h5>
+        <a href="#mechanism">How it works</a>
+        <a href="#market">For advertisers</a>
+        <a href="#install">Install extension</a>
+        <a href="#">Dashboard</a>
+      </div>
+      <div class="foot__col">
+        <h5>Company</h5>
+        <a href="#moat">The moat</a>
+        <a href="#">Manifesto</a>
+        <a href="#">Privacy</a>
+        <a href="#">Open source</a>
+      </div>
+      <div class="foot__col">
+        <h5>Connect</h5>
+        <a href="#">X / Twitter</a>
+        <a href="#">GitHub</a>
+        <a href="#">hello@paidwaits.com</a>
+      </div>
+    </div>
+    <div class="foot__word">PAID<span class="a">WAITS</span></div>
+    <div class="foot__bottom">
+      <span>© 2026 Paidwaits — all rights reserved</span>
+      <span>AI thinks · You get paid for waiting</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+/* ---- live "views served" counter ---- */
+(function(){
+  var el=document.getElementById('views');var n=14203118;
+  setInterval(function(){n+=3+Math.floor(Math.random()*14);el.textContent=n.toLocaleString('en-US');},800);
+})();
+
+/* ---- terminal demo: cycle thinking word + ad + credits ---- */
+(function(){
+  var words=["Pondering","Spelunking","Noodling","Percolating","Ruminating","Conjuring","Finagling","Marinating"];
+  var glyphs=["✶","✻","✳","✻"];
+  var ads=[
+    {brand:"Ramp",tag:"save time and money",letter:"R",bg:"#fbbf24",fg:"#000"},
+    {brand:"Linear",tag:"ship faster, plan less",letter:"L",bg:"#6366f1",fg:"#fff"},
+    {brand:"Vercel",tag:"deploy in seconds",letter:"▲",bg:"#fff",fg:"#000"}
+  ];
+  var tick=0,frame=0,ds=23;
+  var gEl=document.getElementById('glyph'),wEl=document.getElementById('word'),
+      t1=document.getElementById('t1'),t2=document.getElementById('t2'),
+      logo=document.getElementById('adlogo'),adt=document.getElementById('adtext'),cr=document.getElementById('credits');
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  setInterval(function(){frame=(frame+1)%glyphs.length;gEl.textContent=glyphs[frame];},180);
+  setInterval(function(){
+    ds++;
+    if(ds>=50){
+      ds=0;tick++;
+      var w=words[tick%words.length];wEl.textContent=w+"…";wEl.classList.remove('fade');void wEl.offsetWidth;wEl.classList.add('fade');
+      var a=ads[tick%ads.length];
+      logo.textContent=a.letter;logo.style.background=a.bg;logo.style.color=a.fg;
+      adt.innerHTML='<span class="term__brand">'+a.brand+'</span><span class="term__tag"> · '+a.tag+'.</span>';
+      adt.classList.remove('fade');void adt.offsetWidth;adt.classList.add('fade');
+      cr.textContent='+$'+((tick+1)*0.05).toFixed(2);
+    }
+    var s=(ds/10).toFixed(1);t1.textContent=s;t2.textContent=s;
+  },100);
+})();
+
+/* ---- bid panel live math ---- */
+(function(){
+  var price=document.getElementById('price'),blocks=document.getElementById('blocks');
+  var sViews=document.getElementById('sViews'),sPrice=document.getElementById('sPrice'),
+      sTotal=document.getElementById('sTotal'),bTotal=document.getElementById('bTotal');
+  function calc(){
+    var p=parseFloat(price.value)||0,b=parseInt(blocks.value)||0;
+    sViews.textContent=(b*1000).toLocaleString('en-US');
+    sPrice.textContent='$'+p.toFixed(2);
+    var tot=(p*b).toFixed(2);
+    sTotal.textContent=tot;bTotal.textContent=tot;
+  }
+  price.addEventListener('input',calc);blocks.addEventListener('input',calc);calc();
+})();
+</script>
+</body>
+</html>
