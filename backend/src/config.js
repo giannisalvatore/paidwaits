@@ -14,7 +14,7 @@ export const economics = {
   CLICK_MULT:         50,             // un click costa bid × 50 / 1000
   USER_SHARE:         0.5,            // 50% all'utente
   MIN_CAMPAIGN_FUND_MICROS: 20_000_000, // budget minimo per lanciare una campagna $20
-  MIN_PAYOUT_MICROS:  20_000_000,     // soglia payout $20
+  MIN_PAYOUT_MICROS:  10_000_000,     // soglia payout $10
 };
 
 // Anti-fraud e session guard (vedi ANALISI.md §4)
@@ -28,7 +28,8 @@ export const guard = {
   // inserzionisti). Il ritmo resta limitato dai cap FISICI (MIN_VIEW + cooldown)
   // e dal budget delle campagne; l'esposizione sui soldi dal cap economico sotto.
   CLICK_DAY_CAP:        3,            // click pagati max / giorno / utente
-  EARN_DAY_CAP_MICROS:  20_000_000,   // guadagno max $20 / giorno / utente
+  EARN_HOUR_CAP_MICROS: 20_000_000,   // guadagno max $20 / ora / utente
+  EARN_DAY_CAP_MICROS:  200_000_000,  // guadagno max $200 / giorno / utente
   // Cooldown anti-burst tra due impression PAGATE dello stesso utente. La cadenza
   // legittima (slot ~6s) sta abbondantemente sopra, quindi non genera falsi
   // positivi; un client che martella più veloce viene throttlato. (Nota: la

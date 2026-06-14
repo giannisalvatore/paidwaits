@@ -35,14 +35,39 @@ meRouter.get("/", async (ctx) => {
     [userId, now - guard.HEARTBEAT_TTL_MS]
   );
 
+  // Earning limits a finestre fisse (allineate all'enforcement in ads.js).
+  const d = new Date(now);
+  const startOfHour = new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours()).getTime();
+  const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+
+  // Serie giornaliera dei guadagni (user_share) ultimi 14 giorni, per il grafico.
+  const seriesRows = await query(
+    "SELECT (created_at DIV 86400000) AS day_idx, COALESCE(SUM(user_share_micros), 0) AS micros " +
+    "FROM impressions WHERE user_id = ? AND created_at >= ? GROUP BY day_idx ORDER BY day_idx",
+    [userId, startOfDay - 13 * DAY_MS]
+  );
+  const byDay = new Map(seriesRows.map((r) => [Number(r.day_idx), Number(r.micros)]));
+  const todayIdx = Math.floor(now / DAY_MS);
+  const earningsSeries = [];
+  for (let i = 13; i >= 0; i -= 1) {
+    const idx = todayIdx - i;
+    earningsSeries.push({ day: idx * DAY_MS, value: byDay.get(idx) || 0 });
+  }
+
   ctx.body = {
     email: users[0].email,
     name: users[0].name,
     balance_micros: await balance("user", userId),
     withdrawable_micros: withdrawable,   // prelevabile ora (mature); il resto matura a 7gg
-    earned_today_micros: await earnedSince(userId, now - DAY_MS),
+    earned_hour_micros: await earnedSince(userId, startOfHour),
+    earned_today_micros: await earnedSince(userId, startOfDay),
     earned_month_micros: await earnedSince(userId, now - 30 * DAY_MS),
     earned_total_micros: totalEarned,
+    earn_hour_cap_micros: guard.EARN_HOUR_CAP_MICROS,
+    earn_day_cap_micros: guard.EARN_DAY_CAP_MICROS,
+    hour_reset_at: startOfHour + 3_600_000,
+    day_reset_at: startOfDay + DAY_MS,
+    earnings_series: earningsSeries,
     impressions,
     earning_device: earningSessions.length > 0 ? earningSessions[0].device_id : null,
     min_payout_micros: economics.MIN_PAYOUT_MICROS,

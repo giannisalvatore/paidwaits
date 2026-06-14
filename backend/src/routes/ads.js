@@ -120,9 +120,14 @@ adsRouter.post("/impression", async (ctx) => {
     return;
   }
 
-  // Nessun cap di conteggio: l'utente vede tutte le ads possibili. Resta solo il
-  // cap economico giornaliero (protezione frode su scala) e i cap fisici sopra.
-  if ((await earnedSince(ctx.state.userId, now - DAY_MS)) >= guard.EARN_DAY_CAP_MICROS) return reject("earn_cap");
+  // Nessun cap di conteggio: l'utente vede tutte le ads possibili. Restano solo i
+  // cap ECONOMICI (orario + giornaliero) a finestre fisse — coerenti col countdown
+  // "resets in" mostrato in dashboard — e i cap fisici sopra.
+  const d = new Date(now);
+  const startOfHour = new Date(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours()).getTime();
+  const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  if ((await earnedSince(ctx.state.userId, startOfHour)) >= guard.EARN_HOUR_CAP_MICROS) return reject("earn_hour_cap");
+  if ((await earnedSince(ctx.state.userId, startOfDay)) >= guard.EARN_DAY_CAP_MICROS) return reject("earn_cap");
 
   const campaigns = await query(
     "SELECT id, advertiser_id, bid_micros, funded_micros, status FROM campaigns WHERE id = ?",

@@ -11,20 +11,29 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { BidPanel } from "@/components/bid-panel";
-import { BIDS, usd } from "@/lib/marketplace";
-
-const IMPRESSIONS_BASE = 14_203_118;
+import { compactViews, fetchMarket, logoFor, usd, type Market } from "@/lib/marketplace";
 
 export function BidMarket() {
-  const [impressions, setImpressions] = useState(IMPRESSIONS_BASE);
+  const [market, setMarket] = useState<Market | null>(null);
 
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const id = setInterval(() => {
-      setImpressions((n) => n + 3 + Math.floor(Math.random() * 14));
-    }, 800);
-    return () => clearInterval(id);
+    let active = true;
+    const load = () => {
+      fetchMarket()
+        .then((m) => {
+          if (active) setMarket(m);
+        })
+        .catch(() => {});
+    };
+    load();
+    const id = setInterval(load, 8000);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
   }, []);
+
+  const campaigns = market?.campaigns ?? [];
 
   return (
     <section id="advertisers" className="border-t border-foreground/15">
@@ -35,7 +44,7 @@ export function BidMarket() {
             <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
           </span>
           <p className="font-mono text-sm tabular-nums text-primary">
-            {impressions.toLocaleString("en-US")}
+            {(market?.servedToday ?? 0).toLocaleString("en-US")}
           </p>
           <p className="font-mono text-sm text-muted-foreground">5-second views served today</p>
         </div>
@@ -49,7 +58,7 @@ export function BidMarket() {
         </h2>
 
         <div className="mt-12">
-          <BidPanel />
+          <BidPanel market={market} />
         </div>
 
         <p className="mt-16 flex items-center gap-3 font-mono text-xs uppercase tracking-[0.16em] text-muted-foreground">
@@ -78,46 +87,62 @@ export function BidMarket() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {BIDS.map((bid) => (
-                <TableRow
-                  key={bid.rank}
-                  className="border-border transition-colors duration-150 hover:bg-secondary"
-                >
-                  <TableCell className="font-mono text-sm tabular-nums text-muted-foreground">
-                    {bid.rank}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={cn(
-                          "flex h-6 w-6 items-center justify-center rounded text-[10px] font-bold",
-                          bid.logo.className
-                        )}
-                      >
-                        {bid.logo.letter}
-                      </span>
-                      <span className="text-sm font-medium">{bid.campaign}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-mono text-sm tabular-nums">{usd(bid.bid)}</TableCell>
-                  <TableCell className="font-mono text-sm tabular-nums text-muted-foreground">
-                    {bid.views}
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider",
-                        bid.status === "live" ? "text-primary" : "text-muted-foreground"
-                      )}
-                    >
-                      {bid.status === "live" && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-primary motion-safe:animate-pulse" />
-                      )}
-                      {bid.status}
-                    </span>
+              {campaigns.length === 0 ? (
+                <TableRow className="border-border hover:bg-transparent">
+                  <TableCell
+                    colSpan={5}
+                    className="py-8 text-center font-mono text-sm text-muted-foreground"
+                  >
+                    {market ? "No live campaigns yet — be the first to bid." : "Loading market…"}
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                campaigns.map((c) => {
+                  const logo = logoFor(c.name);
+                  return (
+                    <TableRow
+                      key={c.rank}
+                      className="border-border transition-colors duration-150 hover:bg-secondary"
+                    >
+                      <TableCell className="font-mono text-sm tabular-nums text-muted-foreground">
+                        {c.rank}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={cn(
+                              "flex h-6 w-6 items-center justify-center rounded text-[10px] font-bold",
+                              logo.className
+                            )}
+                          >
+                            {logo.letter}
+                          </span>
+                          <span className="text-sm font-medium">{c.name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono text-sm tabular-nums">
+                        {usd(c.bidMicros / 1_000_000)}
+                      </TableCell>
+                      <TableCell className="font-mono text-sm tabular-nums text-muted-foreground">
+                        {compactViews(c.viewsDelivered)}
+                      </TableCell>
+                      <TableCell>
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider",
+                            c.status === "live" ? "text-primary" : "text-muted-foreground"
+                          )}
+                        >
+                          {c.status === "live" && (
+                            <span className="h-1.5 w-1.5 rounded-full bg-primary motion-safe:animate-pulse" />
+                          )}
+                          {c.status}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
             </TableBody>
           </Table>
         </div>

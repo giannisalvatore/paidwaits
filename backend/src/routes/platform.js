@@ -1,5 +1,5 @@
 import Router from "@koa/router";
-import { query } from "../db.js";
+import { query, scalar } from "../db.js";
 import { rateLimit, requireString } from "../middleware.js";
 import { getKillState, detectBotPattern, flagAccountForReview, approveAccount } from "../services/serving.js";
 
@@ -27,6 +27,34 @@ platformRouter.post("/telemetry", rateLimit(120), async (ctx) => {
     [userId, event, ccVersion, detail, Date.now()]
   );
   ctx.body = { ok: true };
+});
+
+// Dati pubblici del marketplace per l'homepage: leaderboard live, views servite
+// oggi, miglior bid corrente. Nessun dato sensibile (solo nome campagna + bid + volume).
+platformRouter.get("/market", rateLimit(120), async (ctx) => {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+  const rows = await query(
+    "SELECT c.id, c.name, c.bid_micros, c.status, COUNT(i.id) AS views_delivered " +
+    "FROM campaigns c LEFT JOIN impressions i ON i.campaign_id = c.id " +
+    "GROUP BY c.id, c.name, c.bid_micros, c.status " +
+    "ORDER BY c.bid_micros DESC LIMIT 12"
+  );
+  const servedToday = await scalar("SELECT COUNT(*) FROM impressions WHERE created_at >= ?", [todayStart]);
+  const topBid = await scalar("SELECT COALESCE(MAX(bid_micros), 0) FROM campaigns WHERE status = 'live'");
+
+  ctx.body = {
+    served_today: servedToday,
+    top_bid_micros: topBid,
+    campaigns: rows.map((c, i) => ({
+      rank: i + 1,
+      name: c.name,
+      bid_micros: Number(c.bid_micros),
+      views_delivered: Number(c.views_delivered),
+      status: c.status,
+    })),
+  };
 });
 
 // --- Admin endpoints (pattern detection, review) ---

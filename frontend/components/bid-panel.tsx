@@ -3,7 +3,14 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { DEFAULT_BID, MIN_BID, TOP_BID, VIEWS_PER_BLOCK, rankFor, usd } from "@/lib/marketplace";
+import {
+  DEFAULT_BID,
+  MIN_BID,
+  VIEWS_PER_BLOCK,
+  rankFor,
+  usd,
+  type Market,
+} from "@/lib/marketplace";
 
 const MAX_ICON_BYTES = 64 * 1024;
 const ICON_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -11,7 +18,7 @@ const ICON_TYPES = ["image/png", "image/jpeg", "image/webp"];
 const inputClass =
   "w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition-colors duration-150 placeholder:text-muted-foreground/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/20";
 
-export function BidPanel() {
+export function BidPanel({ market }: { market: Market | null }) {
   const [email, setEmail] = useState("");
   const [adLine, setAdLine] = useState("");
   const [url, setUrl] = useState("");
@@ -30,7 +37,9 @@ export function BidPanel() {
   const blocks = Math.max(0, Math.floor(parseFloat(blocksInput) || 0));
   const views = blocks * VIEWS_PER_BLOCK;
   const payment = blocks * price;
-  const rank = rankFor(price);
+  const campaigns = market?.campaigns ?? [];
+  const topBid = (market?.topBidMicros ?? 0) / 1_000_000;
+  const rank = rankFor(price, campaigns);
 
   function handleIconFile(file: File | undefined) {
     if (!file) return;
@@ -83,10 +92,8 @@ export function BidPanel() {
         {/* Fields */}
         <div className="flex flex-col gap-5 p-5 sm:p-6">
           <p className="text-sm leading-relaxed text-muted-foreground">
-            Each block buys 1,000 five-second impressions in the Claude Code spinner. Clicks are
-            billed at 50× the impression rate. Highest bid serves first; bid any amount from $1 —
-            outbid the top to take #1, or queue up behind it. 50% of every dollar settles to the
-            developer whose machine showed the ad.
+            1 block = 1,000 five-second impressions in the Claude Code spinner. Clicks are billed at
+            50× a single impression. Highest bid serves first — from $1. Developers keep 50%.
           </p>
           <div>
             <label htmlFor="bid-email" className="text-sm font-medium">
@@ -288,12 +295,13 @@ export function BidPanel() {
           </div>
 
           <p className="text-xs leading-relaxed text-background/55">
-            Top price right now is {usd(TOP_BID)} per block — pay above it to take #1 and deliver
-            first, or any amount from {usd(MIN_BID)} to join the queue. Your price sets where you
-            rank, not how many views you get.
+            {topBid > 0
+              ? `Top price right now is ${usd(topBid)} per block — pay above it to take #1 and deliver first, or any amount from ${usd(MIN_BID)} to join the queue.`
+              : `No live bids yet — any amount from ${usd(MIN_BID)} per block takes #1.`}{" "}
+            Your price sets where you rank, not how many views you get.
           </p>
 
-          {price > TOP_BID && (
+          {topBid > 0 && price > topBid && (
             <p className="font-mono text-xs text-primary">This price takes #1 in the queue</p>
           )}
 
