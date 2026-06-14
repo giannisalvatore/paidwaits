@@ -11,7 +11,7 @@ import { auction } from "../config.js";
 //   resta in coda per bid tra le altre. Non cambia il volume totale garantito.
 export async function pickCampaign(userId) {
   const campaigns = await query(
-    "SELECT id, advertiser_id, name, creative_text, image_url, target_url, bid_micros, blocks, funded_micros FROM campaigns WHERE status = 'live'"
+    "SELECT id, advertiser_id, name, creative_text, image_url, target_url, bid_micros, blocks, funded_micros FROM campaigns WHERE status = 'live' AND paid = 1"
   );
 
   const eligible = [];

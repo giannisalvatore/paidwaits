@@ -41,6 +41,8 @@ CREATE TABLE IF NOT EXISTS campaigns (
   blocks         BIGINT NOT NULL DEFAULT 0,-- block acquistati; 1 block = 1.000 views GARANTITE da consegnare
   funded_micros  BIGINT NOT NULL DEFAULT 0,-- pagato = somma(block × bid al momento dell'acquisto)
   status         ENUM('live','paused') NOT NULL DEFAULT 'live',
+  paid           TINYINT(1) NOT NULL DEFAULT 1,    -- 0 = draft in attesa di pagamento (esclusa dal serving)
+  stripe_session_id VARCHAR(255),                  -- sessione Stripe Checkout (acquisizione pubblica)
   created_at     BIGINT NOT NULL,
   KEY idx_campaigns_adv (advertiser_id),
   CONSTRAINT fk_campaigns_adv FOREIGN KEY (advertiser_id) REFERENCES users(id)
@@ -187,4 +189,16 @@ CREATE TABLE IF NOT EXISTS account_flags (
   reviewed_by    VARCHAR(255),
   final_verdict  ENUM('approved','rejected','suspended'),
   CONSTRAINT fk_flag_user FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Magic link per login passwordless inserzionisti (signup/signin + post-pagamento).
+CREATE TABLE IF NOT EXISTS magic_link_tokens (
+  token       CHAR(64) PRIMARY KEY,
+  email       VARCHAR(255) NOT NULL,
+  user_id     BIGINT UNSIGNED NOT NULL,
+  expires_at  BIGINT NOT NULL,
+  used_at     BIGINT,
+  created_at  BIGINT NOT NULL,
+  KEY idx_magic_email (email, created_at),
+  CONSTRAINT fk_magic_user FOREIGN KEY (user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

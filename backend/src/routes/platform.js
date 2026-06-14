@@ -38,11 +38,12 @@ platformRouter.get("/market", rateLimit(120), async (ctx) => {
   const rows = await query(
     "SELECT c.id, c.name, c.bid_micros, c.status, COUNT(i.id) AS views_delivered " +
     "FROM campaigns c LEFT JOIN impressions i ON i.campaign_id = c.id " +
+    "WHERE c.paid = 1 " +
     "GROUP BY c.id, c.name, c.bid_micros, c.status " +
     "ORDER BY c.bid_micros DESC LIMIT 12"
   );
   const servedToday = await scalar("SELECT COUNT(*) FROM impressions WHERE created_at >= ?", [todayStart]);
-  const topBid = await scalar("SELECT COALESCE(MAX(bid_micros), 0) FROM campaigns WHERE status = 'live'");
+  const topBid = await scalar("SELECT COALESCE(MAX(bid_micros), 0) FROM campaigns WHERE status = 'live' AND paid = 1");
 
   ctx.body = {
     served_today: servedToday,

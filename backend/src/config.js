@@ -6,6 +6,13 @@ export const config = {
   googleClientId: process.env.GOOGLE_CLIENT_ID || "",
   devLogin: process.env.DEV_LOGIN === "true",
   isProduction: process.env.NODE_ENV === "production",
+  // URL base del frontend per costruire i link (magic link, redirect Stripe).
+  appUrl: process.env.APP_URL || process.env.FRONTEND_ORIGIN || "http://localhost:3000",
+  // Stripe (vuoto = fallback dev: nessun pagamento reale, campagna finalizzata subito).
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY || "",
+  // Resend (vuoto = fallback dev: le email vengono loggate in console).
+  resendApiKey: process.env.RESEND_API_KEY || "",
+  mailFrom: process.env.MAIL_FROM || "WaitingAds <onboarding@resend.dev>",
 };
 
 // Economia della piattaforma (vedi ANALISI.md §5–6)

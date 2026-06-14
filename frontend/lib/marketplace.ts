@@ -7,6 +7,7 @@ export const MIN_BID = 1; // $ minimo per block
 export const DEFAULT_BID = 5; // $ default nel form
 export const CLICK_MULT = 50; // un click costa bid × 50 / 1000
 export const VIEWS_PER_BLOCK = 1000;
+export const MIN_CAMPAIGN_FUND = 20; // $ spesa minima per lanciare una campagna
 
 export type CampaignStatus = "live" | "paused";
 

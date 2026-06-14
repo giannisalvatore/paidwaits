@@ -17,7 +17,7 @@ export function SiteNav() {
 
         <div className="flex items-center gap-6">
           {/* Portal access */}
-          <Link href="/advertiser" className={`hidden min-[900px]:inline ${navLinkClass}`}>
+          <Link href="/advertiser/login" className={`hidden min-[900px]:inline ${navLinkClass}`}>
             Advertiser Console
           </Link>
           <Link href="/login" className={`hidden min-[900px]:inline ${navLinkClass}`}>

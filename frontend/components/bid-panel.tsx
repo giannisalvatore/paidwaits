@@ -3,9 +3,11 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api";
 import {
   DEFAULT_BID,
   MIN_BID,
+  MIN_CAMPAIGN_FUND,
   VIEWS_PER_BLOCK,
   rankFor,
   usd,
@@ -30,7 +32,7 @@ export function BidPanel({ market }: { market: Market | null }) {
   const [blocksInput, setBlocksInput] = useState("10");
   const [isDragging, setIsDragging] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
-  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const price = Math.max(0, parseFloat(bidInput) || 0); // price per block
@@ -62,7 +64,7 @@ export function BidPanel({ market }: { market: Market | null }) {
     if (fileRef.current) fileRef.current.value = "";
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const errs: string[] = [];
     if (!/.+@.+\..+/.test(email)) errs.push("Enter a valid email.");
@@ -71,8 +73,30 @@ export function BidPanel({ market }: { market: Market | null }) {
     if (!/^https:\/\/.+\..+/.test(url)) errs.push("Destination URL must start with https://");
     if (price < MIN_BID) errs.push(`Minimum price is ${usd(MIN_BID)} per block.`);
     if (blocks < 1) errs.push("Buy at least 1 block.");
+    if (payment < MIN_CAMPAIGN_FUND)
+      errs.push(`Minimum campaign spend is ${usd(MIN_CAMPAIGN_FUND)}.`);
     setErrors(errs);
-    setSubmitted(errs.length === 0);
+    if (errs.length > 0) return;
+
+    setSubmitting(true);
+    try {
+      const res = await api<{ url: string }>("/campaigns/checkout", {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          name: brandName.trim() || "Untitled campaign",
+          creative_text: adLine,
+          target_url: url,
+          bid_usd: price,
+          blocks,
+        }),
+      });
+      window.location.href = res.url; // Stripe Checkout (o success page in dev)
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "request_failed";
+      setErrors([code === "below_min_fund" ? `Minimum campaign spend is ${usd(MIN_CAMPAIGN_FUND)}.` : "Checkout failed. Try again."]);
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -315,17 +339,13 @@ export function BidPanel({ market }: { market: Market | null }) {
                 ))}
               </ul>
             )}
-            {submitted && (
-              <p className="font-mono text-xs text-primary">
-                Order received — demo only, payments coming soon.
-              </p>
-            )}
             <Button
               type="submit"
               size="lg"
+              disabled={submitting}
               className="w-full rounded-none border border-background bg-background font-mono text-xs uppercase tracking-[0.04em] tabular-nums text-foreground shadow-none transition-colors duration-150 hover:border-primary hover:bg-primary hover:text-white"
             >
-              Fund {usd(payment)} — go live
+              {submitting ? "Redirecting to checkout…" : `Fund ${usd(payment)} — go live`}
             </Button>
           </div>
         </div>

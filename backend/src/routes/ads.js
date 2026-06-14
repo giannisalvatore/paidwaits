@@ -19,7 +19,7 @@ const DAY_MS = 86_400_000;
 // mostrare gli ad sullo spinner senza patchare il bundle.
 adsRouter.get("/spinner-verbs", async (ctx) => {
   const campaigns = await query(
-    "SELECT id, name, creative_text, bid_micros, funded_micros, status FROM campaigns WHERE status = 'live' ORDER BY bid_micros DESC"
+    "SELECT id, name, creative_text, bid_micros, funded_micros, status FROM campaigns WHERE status = 'live' AND paid = 1 ORDER BY bid_micros DESC"
   );
   const verbs = [];
   for (const campaign of campaigns) {

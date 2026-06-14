@@ -3,26 +3,12 @@ import { OAuth2Client } from "google-auth-library";
 import { query } from "../db.js";
 import { config } from "../config.js";
 import { rateLimit, requireAuth, requireString } from "../middleware.js";
+import { upsertUser, issueMagicLink, consumeMagicLink } from "../services/accounts.js";
 
 export const authRouter = new Router({ prefix: "/auth" });
 const googleClient = config.googleClientId ? new OAuth2Client(config.googleClientId) : null;
 
 authRouter.use(rateLimit(20));
-
-async function upsertUser({ googleSub, email, name }) {
-  const existing = await query("SELECT id FROM users WHERE email = ?", [email]);
-  if (existing.length > 0) {
-    if (googleSub) await query("UPDATE users SET google_sub = ?, name = ? WHERE id = ?", [googleSub, name, existing[0].id]);
-    return existing[0].id;
-  }
-  const result = await query("INSERT INTO users (google_sub, email, name, created_at) VALUES (?, ?, ?, ?)", [
-    googleSub,
-    email,
-    name,
-    Date.now(),
-  ]);
-  return result.insertId;
-}
 
 // Login reale: il client manda l'ID token di Google Identity Services.
 authRouter.post("/google", async (ctx) => {
@@ -38,6 +24,23 @@ authRouter.post("/google", async (ctx) => {
   if (!payload?.sub || !payload?.email || !payload?.email_verified) ctx.throw(401, "invalid_google_token");
 
   ctx.session.uid = await upsertUser({ googleSub: payload.sub, email: payload.email, name: payload.name || null });
+  ctx.body = { ok: true };
+});
+
+// Magic link inserzionisti: richiesta. Risponde sempre ok (no enumeration).
+// In dev (DEV_LOGIN) include il link nella risposta per comodità di test.
+authRouter.post("/magic/request", async (ctx) => {
+  const email = requireString(ctx, ctx.request.body?.email, "email", 255).toLowerCase();
+  const { url } = await issueMagicLink(email);
+  ctx.body = { ok: true, ...(config.devLogin ? { dev_link: url } : {}) };
+});
+
+// Magic link: verifica il token e apre la sessione.
+authRouter.post("/magic/verify", async (ctx) => {
+  const token = requireString(ctx, ctx.request.body?.token, "token", 128);
+  const userId = await consumeMagicLink(token);
+  if (!userId) ctx.throw(401, "invalid_or_expired_link");
+  ctx.session.uid = userId;
   ctx.body = { ok: true };
 });
 
