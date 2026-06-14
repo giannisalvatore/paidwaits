@@ -73,6 +73,68 @@ export function isValidEventUuid(v) {
   return typeof v === "string" && EVENT_UUID_RE.test(v);
 }
 
+// --- Pattern detection: Bot-like behavior flagging ---
+// Rileva pattern sospetti e flagga account ad alto rischio frode.
+export async function detectBotPattern(userId) {
+  const now = Date.now();
+  const dayAgo = now - 86_400_000;
+
+  // Controlla impression dell'ultimo giorno
+  const impressions = await query(
+    "SELECT created_at FROM impressions WHERE user_id = ? AND created_at > ? ORDER BY created_at ASC",
+    [userId, dayAgo]
+  );
+
+  if (impressions.length < 50) return null; // Poco traffico, non diagnosticare
+
+  // Analizza gli intervalli tra impression
+  const intervals = [];
+  for (let i = 1; i < impressions.length; i++) {
+    intervals.push(Number(impressions[i].created_at) - Number(impressions[i - 1].created_at));
+  }
+
+  // Calcola deviazione standard degli intervalli
+  const meanInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+  const variance = intervals.reduce((sum, x) => sum + Math.pow(x - meanInterval, 2), 0) / intervals.length;
+  const stdDev = Math.sqrt(variance);
+
+  // Red flag: intervalli troppo regolari (stdDev < 500ms = perfetto bot-like)
+  if (stdDev < 500) {
+    return {
+      reason: `Regular intervals detected (stdDev=${Math.round(stdDev)}ms)`,
+      score: 'high'
+    };
+  }
+
+  // Orange flag: molte impression in poco tempo (>300 al giorno)
+  if (impressions.length > 300) {
+    return {
+      reason: `High volume: ${impressions.length} impressions in 24h`,
+      score: 'medium'
+    };
+  }
+
+  return null;
+}
+
+// Flagga un account come sospetto (frode_risk, ragione, etc.)
+export async function flagAccountForReview(userId, reason, riskScore = 'medium') {
+  await query(
+    "INSERT INTO account_flags (user_id, fraud_risk, flagged_reason, flagged_at) VALUES (?, ?, ?, ?) " +
+    "ON DUPLICATE KEY UPDATE fraud_risk = ?, flagged_reason = ?, flagged_at = ?",
+    [userId, riskScore, reason, Date.now(), riskScore, reason, Date.now()]
+  );
+}
+
+// Approva un account come safe (dopo manual review)
+export async function approveAccount(userId, reviewedBy) {
+  await query(
+    "INSERT INTO account_flags (user_id, final_verdict, reviewed_by, reviewed_at) VALUES (?, 'approved', ?, ?) " +
+    "ON DUPLICATE KEY UPDATE final_verdict = 'approved', reviewed_by = ?, reviewed_at = ?",
+    [userId, reviewedBy, Date.now(), reviewedBy, Date.now()]
+  );
+}
+
 // --- Cooldown anti-burst ------------------------------------------------------
 // True se è passato abbastanza tempo dall'ultima impression PAGATA dell'utente.
 export async function impressionCooldownOk(userId, now) {

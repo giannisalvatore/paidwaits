@@ -56,6 +56,16 @@ export class Api {
     return response.ok ? ((await response.json()) as { earning: boolean }) : null;
   }
 
+  async thinkingStart(sessionId: string): Promise<boolean> {
+    const response = await this.request("POST", "/me/thinking-start", { session_id: sessionId });
+    return response.ok;
+  }
+
+  async thinkingStop(sessionId: string): Promise<boolean> {
+    const response = await this.request("POST", "/me/thinking-stop", { session_id: sessionId });
+    return response.ok;
+  }
+
   async nextAd(sessionId: string): Promise<any | null> {
     const response = await this.request("GET", `/ad/next?session_id=${encodeURIComponent(sessionId)}`);
     if (response.status !== 200) return null;

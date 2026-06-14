@@ -149,3 +149,42 @@ CREATE TABLE IF NOT EXISTS telemetry (
   created_at  BIGINT NOT NULL,
   KEY idx_telemetry_event (event, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Thinking sessions: traccia ogni thinking per anti-bot + analytics.
+-- PreToolUse: started_at. Stop/timeout: finished_at.
+-- Valido se: finished_at IS NULL AND expires_at > NOW().
+CREATE TABLE IF NOT EXISTS thinking_sessions (
+  id          BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  user_id     BIGINT UNSIGNED NOT NULL,
+  session_id  CHAR(36) NOT NULL,
+  started_at  BIGINT NOT NULL,
+  finished_at BIGINT,
+  expires_at  BIGINT NOT NULL,
+  created_at  BIGINT NOT NULL,
+  KEY idx_thinking_user (user_id, started_at),
+  KEY idx_thinking_active (user_id, finished_at, expires_at),
+  CONSTRAINT fk_thinking_user FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Impression maturation: le impression rimangono "pending" per 7gg prima di diventare "mature" (prelevabili).
+-- status: 'pending' (0-7gg) → 'mature' (dopo 7gg) → 'payout_requested' (in un payout)
+CREATE TABLE IF NOT EXISTS impression_status (
+  id            BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  impression_id BIGINT UNSIGNED NOT NULL UNIQUE,
+  status        ENUM('pending','mature','payout_requested') DEFAULT 'pending',
+  updated_at    BIGINT NOT NULL,
+  KEY idx_status (status, updated_at),
+  CONSTRAINT fk_imp_status FOREIGN KEY (impression_id) REFERENCES impressions(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Account flags: fraud risk, review status (manual review prima del payout).
+CREATE TABLE IF NOT EXISTS account_flags (
+  user_id        BIGINT UNSIGNED PRIMARY KEY,
+  fraud_risk     ENUM('low','medium','high') DEFAULT 'low',
+  flagged_reason TEXT,
+  flagged_at     BIGINT,
+  reviewed_at    BIGINT,
+  reviewed_by    VARCHAR(255),
+  final_verdict  ENUM('approved','rejected','suspended'),
+  CONSTRAINT fk_flag_user FOREIGN KEY (user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

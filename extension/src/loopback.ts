@@ -87,6 +87,28 @@ export function startLoopback(port: number, deps: LoopbackDeps): http.Server {
         return;
       }
 
+      // POST /thinking-start — hook PreToolUse: Claude ha iniziato a pensare
+      if (request.method === "POST" && url.pathname === "/thinking-start") {
+        const session = await deps.getSession();
+        if (session) {
+          await deps.api.thinkingStart(session).catch(() => {});
+        }
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+
+      // POST /thinking-stop — hook Stop: Claude ha finito di pensare
+      if (request.method === "POST" && url.pathname === "/thinking-stop") {
+        const session = await deps.getSession();
+        if (session) {
+          await deps.api.thinkingStop(session).catch(() => {});
+        }
+        response.writeHead(204);
+        response.end();
+        return;
+      }
+
       // /ping di diagnostica: conferma che il loopback è raggiungibile dal webview.
       if (request.method === "GET" && url.pathname === "/ping") {
         response.writeHead(200, { "content-type": "application/json" });

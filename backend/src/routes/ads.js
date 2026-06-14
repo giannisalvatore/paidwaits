@@ -46,6 +46,14 @@ adsRouter.get("/ad/next", async (ctx) => {
   if (!session) ctx.throw(404, "session_not_found");
   if (Date.now() - session.last_heartbeat > guard.HEARTBEAT_TTL_MS) ctx.throw(409, "session_expired");
 
+  // Layer 1: Valida che il thinking sia attivo (POST /thinking-start è stato chiamato, non finito, non scaduto).
+  const now = Date.now();
+  const thinking = await scalar(
+    "SELECT expires_at FROM thinking_sessions WHERE user_id = ? AND session_id = ? AND finished_at IS NULL AND expires_at > ? ORDER BY created_at DESC LIMIT 1",
+    [ctx.state.userId, sessionId, now]
+  );
+  if (!thinking) ctx.throw(409, "no_active_thinking");
+
   const campaign = await pickCampaign(ctx.state.userId);
   if (!campaign) {
     ctx.status = 204;
@@ -99,6 +107,14 @@ adsRouter.post("/impression", async (ctx) => {
   };
 
   if (adRequest.status !== "pending") return reject("already_used");
+
+  // Layer 1: Valida che il thinking sia ANCORA attivo (non finito, non scaduto)
+  const thinking = await scalar(
+    "SELECT expires_at FROM thinking_sessions WHERE user_id = ? AND session_id = ? AND finished_at IS NULL AND expires_at > ? ORDER BY created_at DESC LIMIT 1",
+    [ctx.state.userId, adRequest.session_id, now]
+  );
+  if (!thinking) return reject("thinking_expired");
+
   if (now - adRequest.created_at < guard.MIN_VIEW_MS) return reject("too_fast");
   if (now - adRequest.created_at > guard.AD_REQUEST_TTL_MS) return reject("expired");
   if (adRequest.earning !== 1) return reject("not_earning_session");
@@ -136,9 +152,14 @@ adsRouter.post("/impression", async (ctx) => {
     );
     if (updated.affectedRows === 0) return null; // doppio submit in parallelo
     const userShare = Math.floor(costMicros * economics.USER_SHARE);
-    await connection.query(
+    const [impRes] = await connection.query(
       "INSERT INTO impressions (ad_request_id, campaign_id, user_id, session_id, cost_micros, user_share_micros, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       [adRequest.id, campaign.id, ctx.state.userId, adRequest.session_id, costMicros, userShare, now]
+    );
+    // Layer 3: Crea impression_status con status 'pending' (7gg maturazione)
+    await connection.query(
+      "INSERT INTO impression_status (impression_id, status, updated_at) VALUES (?, 'pending', ?)",
+      [impRes.insertId, now]
     );
     return recordSpend(connection, {
       refType: "impression",
