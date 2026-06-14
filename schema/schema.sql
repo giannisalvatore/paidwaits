@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS users (
   google_sub  VARCHAR(64) UNIQUE,          -- subject Google OAuth (NULL solo per utenti dev-mode)
   email       VARCHAR(255) UNIQUE NOT NULL,
   name        VARCHAR(255),
+  stripe_account_id VARCHAR(255),         -- connected account Stripe (payout earner)
+  payouts_enabled   TINYINT(1) NOT NULL DEFAULT 0, -- KYC completato → può ricevere payout
   created_at  BIGINT NOT NULL              -- epoch ms
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -114,6 +116,7 @@ CREATE TABLE IF NOT EXISTS payouts (
   user_id       BIGINT UNSIGNED NOT NULL,
   amount_micros BIGINT NOT NULL,
   status        ENUM('requested','processing','paid','rejected') NOT NULL DEFAULT 'requested',
+  stripe_transfer_id VARCHAR(255),       -- id del Transfer Stripe (payout reale)
   requested_at  BIGINT NOT NULL,
   processed_at  BIGINT,
   KEY idx_payouts_user (user_id),

@@ -2,8 +2,9 @@ import Router from "@koa/router";
 import { query } from "../db.js";
 import { config, economics } from "../config.js";
 import { rateLimit, requireString, requireNumber, requireHttpsUrl } from "../middleware.js";
-import { upsertUser, issueMagicLink } from "../services/accounts.js";
+import { upsertUser } from "../services/accounts.js";
 import { stripeEnabled, createCheckoutSession, retrieveSession } from "../services/stripe.js";
+import { finalizeCampaign, finalizeCampaignBySession } from "../services/funding.js";
 
 const MICROS = 1_000_000;
 
@@ -12,18 +13,6 @@ const MICROS = 1_000_000;
 // Stripe e, a pagamento avvenuto, finalizza + invia il magic link di accesso.
 export const checkoutRouter = new Router();
 checkoutRouter.use(rateLimit(30));
-
-// Finalizza una campagna pagata: paid=1, registra il deposito, invia magic link. Idempotente.
-async function finalizeCampaign(campaignId, advertiserId, fundedMicros, email) {
-  const rows = await query("SELECT paid FROM campaigns WHERE id = ?", [campaignId]);
-  if (rows.length === 0 || rows[0].paid === 1) return; // già finalizzata → no doppio link/deposito
-  await query("UPDATE campaigns SET paid = 1 WHERE id = ?", [campaignId]);
-  await query(
-    "INSERT INTO ledger (account_type, account_id, amount_micros, ref_type, ref_id, created_at) VALUES ('advertiser', ?, ?, 'deposit', ?, ?)",
-    [advertiserId, fundedMicros, `campaign:${campaignId}`, Date.now()]
-  );
-  if (email) await issueMagicLink(email);
-}
 
 checkoutRouter.post("/campaigns/checkout", async (ctx) => {
   const body = ctx.request.body || {};
@@ -72,13 +61,6 @@ checkoutRouter.post("/campaigns/checkout/finalize", async (ctx) => {
   const sessionId = requireString(ctx, ctx.request.body?.session_id, "session_id", 255);
   const session = await retrieveSession(sessionId);
   if (session.payment_status !== "paid") ctx.throw(402, "payment_incomplete");
-  const campaignId = Number(session.metadata?.campaign_id);
-  const rows = await query(
-    "SELECT id, advertiser_id, funded_micros FROM campaigns WHERE id = ? AND stripe_session_id = ?",
-    [campaignId, sessionId]
-  );
-  if (rows.length === 0) ctx.throw(404, "campaign_not_found");
-  const email = session.customer_email || session.customer_details?.email || null;
-  await finalizeCampaign(rows[0].id, rows[0].advertiser_id, rows[0].funded_micros, email);
+  await finalizeCampaignBySession(session);
   ctx.body = { ok: true };
 });

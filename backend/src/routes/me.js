@@ -1,9 +1,16 @@
 import Router from "@koa/router";
 import { query, scalar, transaction } from "../db.js";
-import { economics, guard } from "../config.js";
+import { config, economics, guard } from "../config.js";
 import { requireAuth, requireString } from "../middleware.js";
 import { balance, earnedSince } from "../services/ledger.js";
 import { ownedSession } from "../services/guard.js";
+import {
+  stripeEnabled,
+  createConnectAccount,
+  createAccountLink,
+  retrieveAccount,
+  createTransfer,
+} from "../services/stripe.js";
 
 export const meRouter = new Router({ prefix: "/me" });
 meRouter.use(requireAuth);
@@ -17,7 +24,10 @@ meRouter.get("/", async (ctx) => {
   const userId = ctx.state.userId;
   const now = Date.now();
 
-  const users = await query("SELECT email, name FROM users WHERE id = ?", [userId]);
+  const users = await query(
+    "SELECT email, name, stripe_account_id, payouts_enabled FROM users WHERE id = ?",
+    [userId]
+  );
   const totalEarned = await scalar(
     "SELECT COALESCE(SUM(amount_micros), 0) FROM ledger WHERE account_type = 'user' AND account_id = ? AND amount_micros > 0",
     [userId]
@@ -71,7 +81,54 @@ meRouter.get("/", async (ctx) => {
     impressions,
     earning_device: earningSessions.length > 0 ? earningSessions[0].device_id : null,
     min_payout_micros: economics.MIN_PAYOUT_MICROS,
+    // Stato payout (Stripe Connect). In dev (no Stripe) i payout sono sempre abilitati.
+    payout_connected: stripeEnabled() ? !!users[0].stripe_account_id : true,
+    payouts_enabled: stripeEnabled() ? !!users[0].payouts_enabled : true,
   };
+});
+
+// Avvia/riprende l'onboarding Stripe Express (KYC + IBAN ospitati da Stripe).
+meRouter.post("/connect/onboard", async (ctx) => {
+  const userId = ctx.state.userId;
+  if (!stripeEnabled()) {
+    ctx.body = { url: `${config.appUrl}/dashboard?connect=dev`, dev: true };
+    return;
+  }
+  const rows = await query("SELECT email, stripe_account_id FROM users WHERE id = ?", [userId]);
+  let accountId = rows[0]?.stripe_account_id;
+  if (!accountId) {
+    const account = await createConnectAccount(rows[0].email);
+    accountId = account.id;
+    await query("UPDATE users SET stripe_account_id = ? WHERE id = ?", [accountId, userId]);
+  }
+  const link = await createAccountLink(
+    accountId,
+    `${config.appUrl}/dashboard?connect=refresh`,
+    `${config.appUrl}/dashboard?connect=return`
+  );
+  ctx.body = { url: link.url };
+});
+
+// Stato connessione payout. Sincronizza payouts_enabled da Stripe (polling, no webhook).
+meRouter.get("/connect/status", async (ctx) => {
+  const userId = ctx.state.userId;
+  if (!stripeEnabled()) {
+    ctx.body = { connected: true, payouts_enabled: true, dev: true };
+    return;
+  }
+  const rows = await query("SELECT stripe_account_id, payouts_enabled FROM users WHERE id = ?", [userId]);
+  const accountId = rows[0]?.stripe_account_id || null;
+  let payoutsEnabled = !!rows[0]?.payouts_enabled;
+  if (accountId && !payoutsEnabled) {
+    try {
+      const account = await retrieveAccount(accountId);
+      payoutsEnabled = !!account.payouts_enabled;
+      if (payoutsEnabled) await query("UPDATE users SET payouts_enabled = 1 WHERE id = ?", [userId]);
+    } catch {
+      // best-effort: se Stripe non risponde, restiamo sullo stato in DB
+    }
+  }
+  ctx.body = { connected: !!accountId, payouts_enabled: payoutsEnabled };
 });
 
 // Richiesta payout: SOLO la quota delle impression mature (>7 giorni), sopra la soglia.
@@ -97,6 +154,15 @@ meRouter.post("/payout", async (ctx) => {
     }
   }
 
+  // Connect: con Stripe attivo il payout richiede KYC completato (payouts_enabled).
+  let accountId = null;
+  if (stripeEnabled()) {
+    const u = await query("SELECT stripe_account_id, payouts_enabled FROM users WHERE id = ?", [userId]);
+    if (!u[0]?.stripe_account_id || !u[0]?.payouts_enabled) ctx.throw(403, "payouts_not_enabled");
+    accountId = u[0].stripe_account_id;
+  }
+
+  const initialStatus = stripeEnabled() ? "processing" : "requested";
   const result = await transaction(async (connection) => {
     // Blocca le impression mature ancora 'pending' (evita doppio prelievo concorrente).
     const [matureRows] = await connection.query(
@@ -111,8 +177,8 @@ meRouter.post("/payout", async (ctx) => {
     if (matureMicros < economics.MIN_PAYOUT_MICROS) return { error: "below_minimum_payout" };
 
     const [payout] = await connection.query(
-      "INSERT INTO payouts (user_id, amount_micros, status, requested_at) VALUES (?, ?, 'requested', ?)",
-      [userId, matureMicros, now]
+      "INSERT INTO payouts (user_id, amount_micros, status, requested_at) VALUES (?, ?, ?, ?)",
+      [userId, matureMicros, initialStatus, now]
     );
     const ids = matureRows.map((r) => r.id);
     await connection.query(
@@ -123,10 +189,43 @@ meRouter.post("/payout", async (ctx) => {
       "INSERT INTO ledger (account_type, account_id, amount_micros, ref_type, ref_id, created_at) VALUES ('user', ?, ?, 'payout', ?, ?)",
       [userId, -matureMicros, String(payout.insertId), now]
     );
-    return { id: payout.insertId, amount_micros: matureMicros };
+    return { id: payout.insertId, amount_micros: matureMicros, ids };
   });
 
   if (result.error) ctx.throw(409, result.error);
+
+  // Transfer reale piattaforma → connected account (post-commit). In dev resta 'requested'.
+  if (stripeEnabled()) {
+    try {
+      const transfer = await createTransfer({
+        amountMicros: result.amount_micros,
+        destinationAccountId: accountId,
+        metadata: { payout_id: result.id, user_id: userId },
+      });
+      await query("UPDATE payouts SET status = 'paid', stripe_transfer_id = ?, processed_at = ? WHERE id = ?", [
+        transfer.id,
+        Date.now(),
+        result.id,
+      ]);
+    } catch {
+      // Compensazione: il transfer è fallito → rimborsa a ledger, riporta le impression
+      // a 'pending' e segna il payout come rejected (niente soldi persi nel sistema).
+      const ts = Date.now();
+      await query("UPDATE payouts SET status = 'rejected', processed_at = ? WHERE id = ?", [ts, result.id]);
+      await query(
+        "INSERT INTO ledger (account_type, account_id, amount_micros, ref_type, ref_id, created_at) VALUES ('user', ?, ?, 'payout_reversal', ?, ?)",
+        [userId, result.amount_micros, String(result.id), ts]
+      );
+      if (result.ids.length) {
+        await query(
+          "UPDATE impression_status SET status = 'pending', updated_at = ? WHERE impression_id IN (?) AND status = 'payout_requested'",
+          [ts, result.ids]
+        );
+      }
+      ctx.throw(502, "payout_transfer_failed");
+    }
+  }
+
   ctx.body = { id: result.id, amount_micros: result.amount_micros };
 });
 

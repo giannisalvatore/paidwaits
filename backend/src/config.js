@@ -10,6 +10,7 @@ export const config = {
   appUrl: process.env.APP_URL || process.env.FRONTEND_ORIGIN || "http://localhost:3000",
   // Stripe (vuoto = fallback dev: nessun pagamento reale, campagna finalizzata subito).
   stripeSecretKey: process.env.STRIPE_SECRET_KEY || "",
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET || "",
   // Resend (vuoto = fallback dev: le email vengono loggate in console).
   resendApiKey: process.env.RESEND_API_KEY || "",
   mailFrom: process.env.MAIL_FROM || "WaitingAds <onboarding@resend.dev>",

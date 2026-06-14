@@ -27,10 +27,13 @@ type Me = {
 };
 
 type Payout = { id: number; amount_micros: number; status: string; requested_at: number };
+type Connect = { connected: boolean; payouts_enabled: boolean };
 
 const PAYOUT_ERRORS: Record<string, string> = {
   below_minimum_payout: "Below the minimum payout.",
   no_mature_impressions: "Nothing has matured yet — impressions become withdrawable after 7 days.",
+  payouts_not_enabled: "Connect a payout account first.",
+  payout_transfer_failed: "Payout transfer failed — please try again.",
   account_under_review: "Your account is under review.",
   account_suspended: "Your account is suspended.",
   account_rejected: "Your account was rejected.",
@@ -75,11 +78,18 @@ function LimitRow({
 export default function UserDashboard() {
   const [me, setMe] = useState<Me | null>(null);
   const [payouts, setPayouts] = useState<Payout[]>([]);
+  const [connect, setConnect] = useState<Connect | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setMe(await api<Me>("/me"));
-    setPayouts((await api<{ payouts: Payout[] }>("/me/payouts")).payouts);
+    const [meData, payoutsData, connectData] = await Promise.all([
+      api<Me>("/me"),
+      api<{ payouts: Payout[] }>("/me/payouts"),
+      api<Connect>("/me/connect/status"),
+    ]);
+    setMe(meData);
+    setPayouts(payoutsData.payouts);
+    setConnect(connectData);
   }, []);
 
   useEffect(() => {
@@ -102,6 +112,16 @@ export default function UserDashboard() {
     }
   }
 
+  async function setupPayouts() {
+    setMessage(null);
+    try {
+      const res = await api<{ url: string }>("/me/connect/onboard", { method: "POST" });
+      window.location.href = res.url;
+    } catch {
+      setMessage("Could not start payout setup.");
+    }
+  }
+
   if (!me) return <main className="p-10 text-sm text-muted-foreground">Loading…</main>;
 
   const stats = [
@@ -111,7 +131,8 @@ export default function UserDashboard() {
     { label: "Available balance", value: usdFromMicros(me.balance_micros, 4) },
   ];
 
-  const canCashOut = me.withdrawable_micros >= me.min_payout_micros;
+  const payoutsEnabled = connect?.payouts_enabled ?? false;
+  const canCashOut = payoutsEnabled && me.withdrawable_micros >= me.min_payout_micros;
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-12">
@@ -144,12 +165,17 @@ export default function UserDashboard() {
             <span className="text-muted-foreground">no earning session active</span>
           )}
         </div>
-        <Button onClick={cashOut} disabled={!canCashOut}>
-          Cash out {usdFromMicros(me.withdrawable_micros)}
-        </Button>
+        {payoutsEnabled ? (
+          <Button onClick={cashOut} disabled={!canCashOut}>
+            Cash out {usdFromMicros(me.withdrawable_micros)}
+          </Button>
+        ) : (
+          <Button onClick={setupPayouts}>Set up payouts</Button>
+        )}
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
         Minimum payout: {usdFromMicros(me.min_payout_micros)}
+        {!payoutsEnabled && " · connect a payout account to cash out"}
       </p>
       {message && <p className="mt-3 text-sm">{message}</p>}
 
