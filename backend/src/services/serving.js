@@ -117,12 +117,16 @@ export async function detectBotPattern(userId) {
   return null;
 }
 
-// Flagga un account come sospetto (frode_risk, ragione, etc.)
+// Flagga un account come sospetto (frode_risk, ragione, etc.).
+// Una ri-flag RIAPRE la review: azzera final_verdict/reviewed_* così un account
+// già approvato che torna sospetto viene ri-bloccato finché non è rivisto di nuovo.
 export async function flagAccountForReview(userId, reason, riskScore = 'medium') {
+  const now = Date.now();
   await query(
     "INSERT INTO account_flags (user_id, fraud_risk, flagged_reason, flagged_at) VALUES (?, ?, ?, ?) " +
-    "ON DUPLICATE KEY UPDATE fraud_risk = ?, flagged_reason = ?, flagged_at = ?",
-    [userId, riskScore, reason, Date.now(), riskScore, reason, Date.now()]
+    "ON DUPLICATE KEY UPDATE fraud_risk = ?, flagged_reason = ?, flagged_at = ?, " +
+    "final_verdict = NULL, reviewed_at = NULL, reviewed_by = NULL",
+    [userId, riskScore, reason, now, riskScore, reason, now]
   );
 }
 

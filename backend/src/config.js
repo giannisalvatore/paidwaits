@@ -23,10 +23,12 @@ export const guard = {
   AD_REQUEST_TTL_MS:    10 * 60_000,  // oltre, l'ad_request scade
   HEARTBEAT_TTL_MS:     90_000,       // sessione viva se heartbeat < 90s fa
   EARNING_COOLDOWN_MS:  60_000,       // cooldown cambio sessione earning
-  IMP_HOUR_CAP:         60,           // impression pagate max / ora / utente
-  IMP_DAY_CAP:          300,          // impression pagate max / giorno / utente
+  // Nessun cap di CONTEGGIO orario/giornaliero: chi usa Claude tutto il giorno
+  // deve poter vedere tutte le ads possibili (sono view reali pagate dagli
+  // inserzionisti). Il ritmo resta limitato dai cap FISICI (MIN_VIEW + cooldown)
+  // e dal budget delle campagne; l'esposizione sui soldi dal cap economico sotto.
   CLICK_DAY_CAP:        3,            // click pagati max / giorno / utente
-  EARN_DAY_CAP_MICROS:  5_000_000,    // guadagno max $5 / giorno / utente
+  EARN_DAY_CAP_MICROS:  20_000_000,   // guadagno max $20 / giorno / utente
   // Cooldown anti-burst tra due impression PAGATE dello stesso utente. La cadenza
   // legittima (slot ~6s) sta abbondantemente sopra, quindi non genera falsi
   // positivi; un client che martella più veloce viene throttlato. (Nota: la

@@ -4,25 +4,26 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%; /* #FFFFFF */
-    --foreground: 0 0% 3.9%; /* #0A0A0A */
-    --card: 0 0% 98%; /* #FAFAFA */
-    --card-foreground: 0 0% 3.9%;
+    /* Editorial palette ("The Futur" style): paper + ink + Claude terracotta */
+    --background: 42 31% 94%; /* paper #F4F1EA */
+    --foreground: 60 4% 5%; /* ink #0E0E0D */
+    --card: 0 0% 100%; /* white surfaces (board, panels) */
+    --card-foreground: 60 4% 5%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 243 75% 59%; /* #4F46E5 — electric blurple */
+    --popover-foreground: 60 4% 5%;
+    --primary: 159 82% 30%; /* emerald #0E8A5F */
     --primary-foreground: 0 0% 100%;
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 3.9%;
-    --muted: 0 0% 96%;
-    --muted-foreground: 240 4% 46%; /* #71717A */
-    --accent: 0 0% 96%;
-    --accent-foreground: 0 0% 3.9%;
+    --secondary: 41 30% 89%; /* paper-2 #ECE7DC */
+    --secondary-foreground: 60 4% 5%;
+    --muted: 41 30% 89%;
+    --muted-foreground: 40 4% 40%; /* #6B6862 */
+    --accent: 41 30% 89%;
+    --accent-foreground: 60 4% 5%;
     --destructive: 0 84% 60%;
-    --border: 0 0% 0% / 0.08;
-    --input: 0 0% 0% / 0.12;
-    --ring: 243 75% 59%;
-    --radius: 0.5rem;
+    --border: 60 4% 5% / 0.14; /* ink line */
+    --input: 60 4% 5% / 0.16;
+    --ring: 159 82% 30%;
+    --radius: 0rem; /* angoli netti, editoriali */
   }
 }
 
@@ -35,5 +36,8 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+  }
+  ::selection {
+    @apply bg-primary text-primary-foreground;
   }
 }

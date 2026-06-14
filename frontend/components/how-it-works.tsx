@@ -73,9 +73,13 @@ function Track({
 
 export function HowItWorks() {
   return (
-    <section id="how-it-works" className="border-t border-border">
+    <section id="how-it-works" className="border-t border-foreground/15">
       <div className="mx-auto max-w-6xl px-4 py-24 sm:px-6">
-        <h2 className="max-w-2xl text-balance text-3xl font-bold tracking-tight sm:text-4xl">
+        <p className="flex items-center gap-3 font-mono text-xs uppercase tracking-[0.18em] text-muted-foreground">
+          <span className="text-primary">( 03 )</span>
+          How it works
+        </p>
+        <h2 className="mt-4 max-w-2xl text-balance text-3xl font-bold leading-[1.02] tracking-tight sm:text-4xl lg:text-5xl">
           A two-sided marketplace for the seconds you already spend waiting.
         </h2>
         <p className="mt-4 max-w-2xl text-muted-foreground">

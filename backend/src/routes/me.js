@@ -9,6 +9,8 @@ export const meRouter = new Router({ prefix: "/me" });
 meRouter.use(requireAuth);
 
 const DAY_MS = 86_400_000;
+const MATURATION_MS = 7 * DAY_MS;   // impression prelevabili solo dopo 7 giorni
+const THINKING_TTL_MS = 120_000;    // finestra di validità di un thinking (estesa a ogni tool)
 
 // Dashboard utente: guadagni, saldo, sessione earning attiva. Solo dati propri.
 meRouter.get("/", async (ctx) => {
@@ -21,6 +23,13 @@ meRouter.get("/", async (ctx) => {
     [userId]
   );
   const impressions = await scalar("SELECT COUNT(*) FROM impressions WHERE user_id = ?", [userId]);
+  // Quota effettivamente prelevabile: impression mature (>7gg) ancora 'pending'.
+  const withdrawable = await scalar(
+    "SELECT COALESCE(SUM(imp.user_share_micros), 0) FROM impressions imp " +
+    "JOIN impression_status stat ON stat.impression_id = imp.id " +
+    "WHERE imp.user_id = ? AND imp.created_at < ? AND stat.status = 'pending'",
+    [userId, now - MATURATION_MS]
+  );
   const earningSessions = await query(
     "SELECT device_id FROM sessions WHERE user_id = ? AND earning = 1 AND last_heartbeat > ?",
     [userId, now - guard.HEARTBEAT_TTL_MS]
@@ -30,6 +39,7 @@ meRouter.get("/", async (ctx) => {
     email: users[0].email,
     name: users[0].name,
     balance_micros: await balance("user", userId),
+    withdrawable_micros: withdrawable,   // prelevabile ora (mature); il resto matura a 7gg
     earned_today_micros: await earnedSince(userId, now - DAY_MS),
     earned_month_micros: await earnedSince(userId, now - 30 * DAY_MS),
     earned_total_micros: totalEarned,
@@ -39,12 +49,14 @@ meRouter.get("/", async (ctx) => {
   };
 });
 
-// Richiesta payout: tutto il saldo, sopra la soglia minima.
-// Layer 3: Impression devono essere mature (>7 giorni) + account non flaggato.
+// Richiesta payout: SOLO la quota delle impression mature (>7 giorni), sopra la soglia.
+// Layer 3: i guadagni freschi NON sono prelevabili finché non maturano (finestra di
+// review). Si preleva esattamente la somma di user_share delle impression mature
+// ancora 'pending'; quelle vengono marcate 'payout_requested' nella stessa transazione.
 meRouter.post("/payout", async (ctx) => {
   const userId = ctx.state.userId;
   const now = Date.now();
-  const MATURATION_MS = 7 * 86_400_000;  // 7 giorni
+  const maturedBefore = now - MATURATION_MS;
 
   // Controlla account flags: se under review o suspended, rifiuta payout
   const flags = await query(
@@ -60,44 +72,37 @@ meRouter.post("/payout", async (ctx) => {
     }
   }
 
-  // Conta impression mature (>7 giorni, non ancora in payout)
-  const mature = await scalar(
-    "SELECT COUNT(*) FROM impressions imp " +
-    "JOIN impression_status stat ON stat.impression_id = imp.id " +
-    "WHERE imp.user_id = ? AND imp.created_at < ? AND stat.status = 'pending'",
-    [userId, now - MATURATION_MS]
-  );
-
-  if (mature === 0) ctx.throw(409, "no_mature_impressions");
-
   const result = await transaction(async (connection) => {
-    const [rows] = await connection.query(
-      "SELECT COALESCE(SUM(amount_micros), 0) FROM ledger WHERE account_type = 'user' AND account_id = ? FOR UPDATE",
-      [userId]
+    // Blocca le impression mature ancora 'pending' (evita doppio prelievo concorrente).
+    const [matureRows] = await connection.query(
+      "SELECT imp.id, imp.user_share_micros FROM impressions imp " +
+      "JOIN impression_status stat ON stat.impression_id = imp.id " +
+      "WHERE imp.user_id = ? AND imp.created_at < ? AND stat.status = 'pending' FOR UPDATE",
+      [userId, maturedBefore]
     );
-    const available = Number(Object.values(rows[0])[0]);
-    if (available < economics.MIN_PAYOUT_MICROS) return null;
+    if (matureRows.length === 0) return { error: "no_mature_impressions" };
+
+    const matureMicros = matureRows.reduce((sum, r) => sum + Number(r.user_share_micros), 0);
+    if (matureMicros < economics.MIN_PAYOUT_MICROS) return { error: "below_minimum_payout" };
 
     const [payout] = await connection.query(
       "INSERT INTO payouts (user_id, amount_micros, status, requested_at) VALUES (?, ?, 'requested', ?)",
-      [userId, available, now]
+      [userId, matureMicros, now]
     );
-    // Marca impression in questo payout come 'payout_requested'
+    const ids = matureRows.map((r) => r.id);
     await connection.query(
-      "UPDATE impression_status SET status = 'payout_requested', updated_at = ? " +
-      "WHERE impression_id IN (SELECT id FROM impressions WHERE user_id = ? AND created_at < ?) " +
-      "AND status = 'pending'",
-      [now, userId, now - MATURATION_MS]
+      "UPDATE impression_status SET status = 'payout_requested', updated_at = ? WHERE impression_id IN (?) AND status = 'pending'",
+      [now, ids]
     );
     await connection.query(
       "INSERT INTO ledger (account_type, account_id, amount_micros, ref_type, ref_id, created_at) VALUES ('user', ?, ?, 'payout', ?, ?)",
-      [userId, -available, String(payout.insertId), now]
+      [userId, -matureMicros, String(payout.insertId), now]
     );
-    return { id: payout.insertId, amount_micros: available };
+    return { id: payout.insertId, amount_micros: matureMicros };
   });
 
-  if (!result) ctx.throw(409, "below_minimum_payout");
-  ctx.body = result;
+  if (result.error) ctx.throw(409, result.error);
+  ctx.body = { id: result.id, amount_micros: result.amount_micros };
 });
 
 meRouter.get("/payouts", async (ctx) => {
@@ -109,7 +114,10 @@ meRouter.get("/payouts", async (ctx) => {
 });
 
 // Layer 1: Notifica che il thinking è iniziato (PreToolUse hook da Claude Code).
-// Valida che sia il primo thinking da questa sessione negli ultimi 120s (no doppi thinking).
+// PreToolUse scatta a OGNI tool dello stesso turno: se c'è già un thinking ATTIVO per
+// questa sessione (non finito, non scaduto) estendiamo solo la finestra di validità —
+// così il thinking resta valido per tutta la durata del turno senza strozzare il
+// serving degli ad. Solo all'inizio di un nuovo turno creiamo una riga nuova.
 meRouter.post("/thinking-start", async (ctx) => {
   const userId = ctx.state.userId;
   const sessionId = requireString(ctx, ctx.request.body?.session_id, "session_id", 36);
@@ -117,21 +125,21 @@ meRouter.post("/thinking-start", async (ctx) => {
   if (!session) ctx.throw(404, "session_not_found");
 
   const now = Date.now();
+  const expiresAt = now + THINKING_TTL_MS;
 
-  // Controlla: è già stato creato un ad_request da questa sessione negli ultimi 120s?
-  const recent = await scalar(
-    "SELECT COUNT(*) FROM ad_requests WHERE session_id = ? AND created_at > ?",
-    [sessionId, now - 120_000]
+  // Prova a estendere un thinking già attivo di questa sessione.
+  const extended = await query(
+    "UPDATE thinking_sessions SET expires_at = ? WHERE user_id = ? AND session_id = ? AND finished_at IS NULL AND expires_at > ?",
+    [expiresAt, userId, sessionId, now]
   );
 
-  if (recent > 0) ctx.throw(409, "thinking_already_active");
-
-  // Registra il thinking: crea una nuova riga (una per ogni thinking)
-  // Valido per 120 secondi (copre il thinking + buffer network)
-  await query(
-    "INSERT INTO thinking_sessions (user_id, session_id, started_at, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
-    [userId, sessionId, now, now + 120_000, now]
-  );
+  // Nessun thinking attivo da estendere → nuovo turno → nuova riga.
+  if (extended.affectedRows === 0) {
+    await query(
+      "INSERT INTO thinking_sessions (user_id, session_id, started_at, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
+      [userId, sessionId, now, expiresAt, now]
+    );
+  }
 
   ctx.body = { ok: true };
 });
@@ -156,7 +164,7 @@ meRouter.get("/thinking-history", async (ctx) => {
   const since = Date.now() - 7 * 86_400_000;
 
   const thinkings = await query(
-    "SELECT id, session_id, started_at, finished_at, TIMESTAMPDIFF(SECOND, FROM_UNIXTIME(started_at/1000), FROM_UNIXTIME(COALESCE(finished_at, UNIX_TIMESTAMP()*1000)/1000)) as duration_sec FROM thinking_sessions WHERE user_id = ? AND created_at > ? ORDER BY created_at DESC",
+    "SELECT id, session_id, started_at, finished_at, expires_at, TIMESTAMPDIFF(SECOND, FROM_UNIXTIME(started_at/1000), FROM_UNIXTIME(COALESCE(finished_at, UNIX_TIMESTAMP()*1000)/1000)) as duration_sec FROM thinking_sessions WHERE user_id = ? AND created_at > ? ORDER BY created_at DESC",
     [userId, since]
   );
 

@@ -37,24 +37,6 @@ const PROPS = [
     ),
   },
   {
-    label: "Prompts never read",
-    icon: (
-      <Icon>
-        <rect x="3" y="11" width="18" height="11" rx="2" />
-        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-      </Icon>
-    ),
-  },
-  {
-    label: "No data sold",
-    icon: (
-      <Icon>
-        <circle cx="12" cy="12" r="10" />
-        <path d="m4.9 4.9 14.2 14.2" />
-      </Icon>
-    ),
-  },
-  {
     label: "50% revenue share",
     icon: (
       <Icon>
@@ -68,11 +50,11 @@ const PROPS = [
 
 export function TrustStrip() {
   return (
-    <ul className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2.5">
+    <ul className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2.5">
       {PROPS.map(({ label, icon }) => (
         <li
           key={label}
-          className="flex items-center gap-2 text-sm font-medium text-foreground"
+          className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.08em] text-muted-foreground"
         >
           {icon}
           {label}

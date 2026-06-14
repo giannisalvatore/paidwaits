@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { CLICK_MULT, DEFAULT_BID, MIN_BID, TOP_BID, VIEWS_PER_BLOCK, rankFor, usd } from "@/lib/marketplace";
+import { DEFAULT_BID, MIN_BID, TOP_BID, VIEWS_PER_BLOCK, rankFor, usd } from "@/lib/marketplace";
 
 const MAX_ICON_BYTES = 64 * 1024;
 const ICON_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -31,7 +31,6 @@ export function BidPanel() {
   const views = blocks * VIEWS_PER_BLOCK;
   const payment = blocks * price;
   const rank = rankFor(price);
-  const clickCost = (price * CLICK_MULT) / 1000;
 
   function handleIconFile(file: File | undefined) {
     if (!file) return;
@@ -68,9 +67,9 @@ export function BidPanel() {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-4 sm:px-6">
-        <h3 className="font-semibold">Buy blocks</h3>
+    <div className="overflow-hidden rounded-none border border-foreground bg-card">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-foreground px-5 py-4 sm:px-6">
+        <h3 className="font-semibold">Buy ads</h3>
         <p className="font-mono text-xs text-muted-foreground">
           1 block = 1,000 views (5s each)
         </p>
@@ -83,6 +82,12 @@ export function BidPanel() {
       >
         {/* Fields */}
         <div className="flex flex-col gap-5 p-5 sm:p-6">
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Each block buys 1,000 five-second impressions in the Claude Code spinner. Clicks are
+            billed at 50× the impression rate. Highest bid serves first; bid any amount from $1 —
+            outbid the top to take #1, or queue up behind it. 50% of every dollar settles to the
+            developer whose machine showed the ad.
+          </p>
           <div>
             <label htmlFor="bid-email" className="text-sm font-medium">
               Email <span className="text-muted-foreground">(required)</span>
@@ -253,41 +258,36 @@ export function BidPanel() {
             </div>
           </div>
 
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            Each block buys 1,000 views — one view is a 5-second show while Claude is thinking.
-            More blocks = more views. A higher price per block moves you up the queue so your views
-            deliver sooner — it doesn&apos;t add views. You also pay {usd(clickCost)} per click.
-          </p>
         </div>
 
         {/* Summary */}
-        <div className="flex flex-col gap-5 bg-background/50 p-5 sm:p-6">
+        <div className="flex flex-col gap-5 bg-foreground p-5 text-background sm:p-6">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
+            <p className="font-mono text-[11px] uppercase tracking-widest text-background/55">
               Your queue position
             </p>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className="mt-1 text-sm text-background/55">
               {usd(price)} per block in today&apos;s market
             </p>
             <p className="mt-3 text-4xl font-bold tabular-nums tracking-tight">#{rank}</p>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 rounded-lg border border-border bg-card p-3">
+          <div className="grid grid-cols-3 gap-2 rounded-none border border-background/15 bg-background/5 p-3">
             <div>
               <p className="font-mono text-sm tabular-nums">{blocks.toLocaleString("en-US")}</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">blocks</p>
+              <p className="mt-0.5 text-[11px] text-background/50">blocks</p>
             </div>
             <div>
               <p className="font-mono text-sm tabular-nums">{views.toLocaleString("en-US")}</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">total views</p>
+              <p className="mt-0.5 text-[11px] text-background/50">total views</p>
             </div>
             <div>
               <p className="font-mono text-sm tabular-nums">{usd(payment)}</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">you pay</p>
+              <p className="mt-0.5 text-[11px] text-background/50">you pay</p>
             </div>
           </div>
 
-          <p className="text-xs leading-relaxed text-muted-foreground">
+          <p className="text-xs leading-relaxed text-background/55">
             Top price right now is {usd(TOP_BID)} per block — pay above it to take #1 and deliver
             first, or any amount from {usd(MIN_BID)} to join the queue. Your price sets where you
             rank, not how many views you get.
@@ -315,7 +315,7 @@ export function BidPanel() {
             <Button
               type="submit"
               size="lg"
-              className="w-full bg-primary font-semibold tabular-nums text-primary-foreground transition-colors duration-150 hover:bg-primary/90"
+              className="w-full rounded-none border border-background bg-background font-mono text-xs uppercase tracking-[0.04em] tabular-nums text-foreground shadow-none transition-colors duration-150 hover:border-primary hover:bg-primary hover:text-white"
             >
               Fund {usd(payment)} — go live
             </Button>

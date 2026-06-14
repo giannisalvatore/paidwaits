@@ -11,7 +11,6 @@ import { getKillState, claimBillingEvent, isValidEventUuid, impressionCooldownOk
 export const adsRouter = new Router();
 adsRouter.use(requireAuth);
 
-const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 
 // Verbi per lo spinner di Claude Code (settings.json → spinnerVerbs).
@@ -89,12 +88,7 @@ async function loadPendingAdRequest(ctx) {
   return rows[0];
 }
 
-// Conta solo le impression pagate (quelle che hanno generato un guadagno).
-function paidImpressionsSince(userId, sinceMs) {
-  return scalar("SELECT COUNT(*) FROM impressions WHERE user_id = ? AND created_at >= ?", [userId, sinceMs]);
-}
-
-// Validazione impression (ANALISI.md §4): sessione earning viva, >=5s, cap orari/giornalieri.
+// Validazione impression (ANALISI.md §4): sessione earning viva, >=5s, cap economico giornaliero.
 adsRouter.post("/impression", async (ctx) => {
   const adRequest = await loadPendingAdRequest(ctx);
   const now = Date.now();
@@ -126,8 +120,8 @@ adsRouter.post("/impression", async (ctx) => {
     return;
   }
 
-  if ((await paidImpressionsSince(ctx.state.userId, now - HOUR_MS)) >= guard.IMP_HOUR_CAP) return reject("hour_cap");
-  if ((await paidImpressionsSince(ctx.state.userId, now - DAY_MS)) >= guard.IMP_DAY_CAP) return reject("day_cap");
+  // Nessun cap di conteggio: l'utente vede tutte le ads possibili. Resta solo il
+  // cap economico giornaliero (protezione frode su scala) e i cap fisici sopra.
   if ((await earnedSince(ctx.state.userId, now - DAY_MS)) >= guard.EARN_DAY_CAP_MICROS) return reject("earn_cap");
 
   const campaigns = await query(

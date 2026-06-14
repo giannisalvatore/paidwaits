@@ -80,7 +80,7 @@ export function DemoBlock() {
   const credits = ((tick + 1) * 0.05).toFixed(2); // +$0.05 each time an ad is shown
 
   return (
-    <div className="mx-auto w-full max-w-md overflow-hidden rounded-2xl border border-black/10 bg-[#16181c] shadow-2xl shadow-black/20">
+    <div className="mx-auto w-full max-w-md overflow-hidden rounded-none border border-black/40 bg-[#161514] shadow-2xl shadow-black/30">
       {/* Window chrome */}
       <div className="flex items-center gap-2 border-b border-white/[0.06] px-4 py-3">
         <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />

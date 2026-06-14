@@ -11,12 +11,16 @@ Protezione multi-layer contro bot che replicano l'API in cascata (thinking-start
 **Cosa:** POST /thinking-start crea una sessione di thinking che valida GET /ad/next e POST /impression.
 
 **Come funziona:**
-1. Estensione riceve hook `PreToolUse` da Claude Code
+1. Estensione riceve hook `PreToolUse` da Claude Code (scatta a OGNI tool del turno)
 2. Estensione chiama `POST /me/thinking-start {session_id}`
-3. Backend registra: "thinking attivo per questa sessione fino a T+120s"
+3. Backend: se c'è già un thinking attivo per la sessione ne **estende** la validità a T+120s (stesso turno → stessa riga); altrimenti crea una nuova riga (nuovo turno)
 4. `GET /ad/next` verifica che thinking sia attivo (richiede thinking_sessions valida)
 5. `POST /impression` verifica che thinking sia ANCORA attivo
-6. Se thinking è scaduto: `POST /impression` → 400 "thinking_expired"
+6. Se thinking è scaduto: `POST /impression` → "thinking_expired"
+
+> La finestra si **estende a ogni tool**, quindi un turno lungo resta sempre servibile.
+> Non c'è più alcun lock che blocca i thinking successivi: il ritmo è limitato solo
+> dai cap fisici (5s view + 4s cooldown) e dal cap economico giornaliero.
 
 **Protegge da:**
 - Bot che chiama GET /ad/next senza thinking-start
@@ -88,19 +92,26 @@ CREATE TABLE impression_status (
 
 **Logica payout:**
 ```js
-// Prima di processare payout:
-const mature = await query(
-  "SELECT COUNT(*) FROM impressions WHERE user_id = ? AND created_at < NOW() - 7gg"
+// Si preleva SOLO la quota delle impression mature (>7gg) ancora 'pending'.
+// I guadagni freschi NON sono prelevabili finché non maturano (finestra di review).
+const matureRows = await query(
+  "SELECT imp.id, imp.user_share_micros FROM impressions imp " +
+  "JOIN impression_status stat ON stat.impression_id = imp.id " +
+  "WHERE imp.user_id = ? AND imp.created_at < NOW()-7gg AND stat.status='pending' FOR UPDATE"
 );
-if (mature === 0) ctx.throw(409, "no_mature_impressions");
+if (matureRows.length === 0) throw "no_mature_impressions";
+const matureMicros = sum(matureRows.user_share_micros);
+if (matureMicros < MIN_PAYOUT) throw "below_minimum_payout";
+// → paga matureMicros, marca quelle impression 'payout_requested', ledger -matureMicros
 
-// Controlla account flags
-const flags = await query("SELECT final_verdict FROM account_flags WHERE user_id = ?");
-if (flags[0]?.final_verdict === 'suspended') ctx.throw(403, "account_suspended");
-if (flags[0]?.final_verdict === null && flags[0]?.fraud_risk === 'high') {
-  ctx.throw(403, "account_under_review");
-}
+// Controlla account flags (prima della transazione)
+if (flag.final_verdict === 'suspended') throw "account_suspended";
+if (flag.final_verdict === null && flag.fraud_risk === 'high') throw "account_under_review";
 ```
+
+> ⚠️ **Importante:** il payout NON svuota l'intero saldo. Paga solo la somma di
+> `user_share_micros` delle impression che hanno superato i 7 giorni. Il resto del
+> saldo (guadagni recenti) resta visibile ma non prelevabile finché non matura.
 
 ---
 
