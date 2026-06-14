@@ -1,5 +1,6 @@
 import { query, scalar } from "../db.js";
 import { auction } from "../config.js";
+import { costPerImpression } from "./money.js";
 
 // Modello a BLOCK (stile kickbacks):
 // - i BLOCK comprano VOLUME: 1 block = 1.000 views (da 5s) GARANTITE da consegnare.
@@ -16,7 +17,7 @@ export async function pickCampaign(userId) {
 
   const eligible = [];
   for (const campaign of campaigns) {
-    const costMicros = Math.floor(campaign.bid_micros / 1000);
+    const costMicros = costPerImpression(campaign.bid_micros);
     const spent = await campaignSpend(campaign.id);
     if (campaign.funded_micros - spent < costMicros) continue;          // budget di sicurezza
     const delivered = await scalar("SELECT COUNT(*) FROM impressions WHERE campaign_id = ?", [campaign.id]);

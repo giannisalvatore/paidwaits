@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node --watch --env-file-if-exists=.env src/index.js",
     "start": "node --env-file-if-exists=.env src/index.js",
-    "migrate": "node --env-file-if-exists=.env src/migrate.js"
+    "migrate": "node --env-file-if-exists=.env src/migrate.js",
+    "test": "node --test test/"
   },
   "dependencies": {
     "@koa/bodyparser": "^5.1.1",

@@ -1,7 +1,9 @@
-# WaitingAds — Analisi di prodotto
+# Paidwaits — Analisi di prodotto
 
 > **AI thinks. Get paid for waiting.**
 > Trasformiamo i tempi di attesa di Claude Code in inventory pubblicitaria. Il 50% del ricavo va a chi guarda.
+
+> ⚠️ **NOTA DI STATO (2026-06-14).** Questo documento descrive il prodotto *target* e in più punti **diverge dal codice reale**. Per lo stato verificato, i finding e la roadmap vedi [docs/AUDIT-E-ROADMAP.md](docs/AUDIT-E-ROADMAP.md). In sintesi, dopo l'audit: il modello reale è **a blocchi** (non l'asta continua descritta in §5 — decisione: si tengono i blocchi, questa sezione va riscritta); il DB è **MySQL** (non Postgres); i **pagamenti Stripe non esistono ancora** (solo TODO); il brand è **Paidwaits**.
 
 ---
 
@@ -47,7 +49,7 @@ Il pezzo che "consuma" le pubblicità. Flusso:
 
 ### 2.2 Backend (MVP)
 
-API stateless + Postgres. Moduli:
+API stateless + MySQL 8 (mysql2, raw query, no ORM). Moduli:
 
 | Modulo | Responsabilità |
 |---|---|
