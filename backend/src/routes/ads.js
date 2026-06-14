@@ -1,11 +1,12 @@
 import Router from "@koa/router";
 import { randomUUID } from "node:crypto";
 import { query, scalar, transaction } from "../db.js";
-import { economics, guard } from "../config.js";
+import { guard } from "../config.js";
 import { requireAuth, requireString } from "../middleware.js";
 import { ownedSession, isEarning } from "../services/guard.js";
 import { pickCampaign, campaignSpend } from "../services/auction.js";
 import { recordSpend, earnedSince } from "../services/ledger.js";
+import { costPerImpression, costPerClick, splitSpend } from "../services/money.js";
 import { getKillState, claimBillingEvent, isValidEventUuid, impressionCooldownOk } from "../services/serving.js";
 
 export const adsRouter = new Router();
@@ -24,7 +25,7 @@ adsRouter.get("/spinner-verbs", async (ctx) => {
   );
   const verbs = [];
   for (const campaign of campaigns) {
-    const costMicros = Math.floor(campaign.bid_micros / 1000);
+    const costMicros = costPerImpression(campaign.bid_micros);
     if (campaign.funded_micros - (await campaignSpend(campaign.id)) < costMicros) continue;
     verbs.push(`${campaign.name}: ${campaign.creative_text}`);
     if (verbs.length >= 20) break;
@@ -119,7 +120,7 @@ adsRouter.post("/impression", async (ctx) => {
     [adRequest.campaign_id]
   );
   const campaign = campaigns[0];
-  const costMicros = Math.floor(campaign.bid_micros / 1000);
+  const costMicros = costPerImpression(campaign.bid_micros);
   if (campaign.status !== "live") return reject("campaign_paused");
   if (campaign.funded_micros - (await campaignSpend(campaign.id)) < costMicros) return reject("campaign_budget");
 
@@ -135,7 +136,9 @@ adsRouter.post("/impression", async (ctx) => {
       [adRequest.id]
     );
     if (updated.affectedRows === 0) return null; // doppio submit in parallelo
-    const userShare = Math.floor(costMicros * economics.USER_SHARE);
+    // Stessa fonte dello split del ledger: la quota in tabella impressions e quella
+    // accreditata nel ledger NON possono divergere (prima erano calcolate due volte).
+    const { user: userShare } = splitSpend({ refType: "impression", costMicros });
     await connection.query(
       "INSERT INTO impressions (ad_request_id, campaign_id, user_id, session_id, cost_micros, user_share_micros, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       [adRequest.id, campaign.id, ctx.state.userId, adRequest.session_id, costMicros, userShare, now]
@@ -183,7 +186,7 @@ adsRouter.post("/click", async (ctx) => {
     [impression.campaign_id]
   );
   const campaign = campaigns[0];
-  const clickCostMicros = Math.floor((campaign.bid_micros * economics.CLICK_MULT) / 1000);
+  const clickCostMicros = costPerClick(campaign.bid_micros);
 
   const paidToday = await scalar(
     "SELECT COUNT(*) FROM clicks WHERE user_id = ? AND cost_micros > 0 AND created_at >= ?",

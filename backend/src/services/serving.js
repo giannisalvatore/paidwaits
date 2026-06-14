@@ -60,10 +60,10 @@ export async function claimBillingEvent(connection, { eventUuid, kind, userId, r
     return true;
   } catch (e) {
     if (e && e.code === "ER_DUP_ENTRY") return false; // replay dello stesso evento
-    // Fail-open se la tabella non esiste ancora (migrazione non eseguita): non
-    // dedup, ma non rompiamo il billing (l'unicità di ad_request_id/impression_id
-    // resta come dedup di base).
-    if (e && e.code === "ER_NO_SUCH_TABLE") return true;
+    // Fail-CLOSED: per il denaro il fallimento sicuro è FERMARSI, non fatturare.
+    // Se la tabella billing_events manca (migrazione non eseguita) propaghiamo
+    // l'errore: la transazione del billing fa rollback e l'evento NON viene
+    // fatturato (meglio non contare che contare due volte). Eseguire `npm run migrate`.
     throw e;
   }
 }

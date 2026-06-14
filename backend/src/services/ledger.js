@@ -1,5 +1,5 @@
 import { scalar } from "../db.js";
-import { economics } from "../config.js";
+import { splitSpend } from "./money.js";
 
 // Saldo di un account = somma delle scritture del ledger. Fonte di verità unica.
 export function balance(accountType, accountId) {
@@ -13,12 +13,11 @@ export function balance(accountType, accountId) {
 // Impression: addebito inserzionista, 50% all'utente, 50% alla piattaforma.
 // Click: addebito inserzionista, 100% alla piattaforma (i click non pagano l'utente).
 export async function recordSpend(connection, { refType, refId, advertiserId, userId, costMicros }) {
-  const userShare = refType === "impression" ? Math.floor(costMicros * economics.USER_SHARE) : 0;
-  const platformShare = costMicros - userShare;
+  const { advertiser, user: userShare, platform: platformShare } = splitSpend({ refType, costMicros });
   const now = Date.now();
   const insert =
     "INSERT INTO ledger (account_type, account_id, amount_micros, ref_type, ref_id, created_at) VALUES (?, ?, ?, ?, ?, ?)";
-  await connection.query(insert, ["advertiser", advertiserId, -costMicros, refType, refId, now]);
+  await connection.query(insert, ["advertiser", advertiserId, advertiser, refType, refId, now]);
   if (userShare > 0) await connection.query(insert, ["user", userId, userShare, refType, refId, now]);
   await connection.query(insert, ["platform", 0, platformShare, refType, refId, now]);
   return userShare;
