@@ -217,7 +217,7 @@ curl -X POST http://localhost:4100/impression \
 ```bash
 # Scansiona tutti gli utenti per pattern bot-like
 curl -X POST http://localhost:4100/admin/detect-bots \
-  -H 'authorization: Bearer ADMIN_TOKEN'  # TODO: Aggiungere auth
+  -H 'authorization: Bearer ADMIN_TOKEN'  # richiesto: ADMIN_TOKEN da .env (fail-closed)
 # Ritorna: {"flagged": [...], "count": N}
 
 # Lista account flaggati
@@ -277,7 +277,7 @@ curl http://localhost:4100/me/thinking-history \
 
 ## ⚙️ TODO
 
-- [ ] Aggiungere autenticazione admin agli endpoint `/admin/*`
+- [x] Aggiungere autenticazione admin agli endpoint `/admin/*` (ADMIN_TOKEN, fail-closed)
 - [ ] Implementare scheduled job per detect-bots (es. ogni 24h)
 - [ ] Dashboard admin per review account flaggati
 - [ ] Webhook notification quando account viene flaggato (Slack/email)

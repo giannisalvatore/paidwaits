@@ -1,6 +1,6 @@
 import Router from "@koa/router";
 import { query, scalar } from "../db.js";
-import { rateLimit, requireString } from "../middleware.js";
+import { rateLimit, requireString, requireAdmin } from "../middleware.js";
 import { getKillState, detectBotPattern, flagAccountForReview, approveAccount } from "../services/serving.js";
 
 // Route di piattaforma SENZA auth (l'estensione le consulta a prescindere dal
@@ -62,8 +62,7 @@ platformRouter.get("/market", rateLimit(120), async (ctx) => {
 // TODO: Aggiungere autenticazione admin prima di esporre in produzione
 
 // Scansiona tutti gli account per pattern bot-like e li flagga
-platformRouter.post("/admin/detect-bots", async (ctx) => {
-  // TODO: Autenticazione admin
+platformRouter.post("/admin/detect-bots", requireAdmin, async (ctx) => {
   const users = await query("SELECT id FROM users");
   const flagged = [];
 
@@ -79,8 +78,7 @@ platformRouter.post("/admin/detect-bots", async (ctx) => {
 });
 
 // Approva un account dopo manual review
-platformRouter.post("/admin/approve-account", async (ctx) => {
-  // TODO: Autenticazione admin
+platformRouter.post("/admin/approve-account", requireAdmin, async (ctx) => {
   const body = ctx.request.body || {};
   const userId = body.user_id;
   const reviewedBy = requireString(ctx, body.reviewed_by, "reviewed_by", 255);
@@ -92,8 +90,7 @@ platformRouter.post("/admin/approve-account", async (ctx) => {
 });
 
 // Lista account flaggati per review
-platformRouter.get("/admin/flagged-accounts", async (ctx) => {
-  // TODO: Autenticazione admin
+platformRouter.get("/admin/flagged-accounts", requireAdmin, async (ctx) => {
   const flagged = await query(
     "SELECT user_id, fraud_risk, flagged_reason, flagged_at, reviewed_at, final_verdict FROM account_flags WHERE final_verdict IS NULL ORDER BY flagged_at DESC"
   );
@@ -101,8 +98,7 @@ platformRouter.get("/admin/flagged-accounts", async (ctx) => {
 });
 
 // Debug: ispeziona thinking/impression pattern di un account (per review manuale)
-platformRouter.get("/admin/inspect-account/:user_id", async (ctx) => {
-  // TODO: Autenticazione admin
+platformRouter.get("/admin/inspect-account/:user_id", requireAdmin, async (ctx) => {
   const userId = Number(ctx.params.user_id);
   if (!userId || userId < 1) ctx.throw(400, "invalid_user_id");
 

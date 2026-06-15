@@ -1,4 +1,6 @@
+import { timingSafeEqual } from "node:crypto";
 import { query } from "./db.js";
+import { config } from "./config.js";
 
 // Error handler globale: mai esporre dettagli interni al client.
 export async function errorHandler(ctx, next) {
@@ -22,6 +24,20 @@ export async function requireAuth(ctx, next) {
     ctx.throw(401, "unauthorized");
   }
   ctx.state.userId = ctx.session.uid;
+  await next();
+}
+
+// Guard admin: richiede un ADMIN_TOKEN (header "Authorization: Bearer <token>" o
+// "x-admin-token"). Fail-closed: senza token configurato nega tutto. Confronto
+// timing-safe per non leakare la lunghezza/contenuto del token.
+export async function requireAdmin(ctx, next) {
+  const expected = config.adminToken;
+  if (!expected) ctx.throw(503, "admin_not_configured");
+  const header = ctx.get("authorization") || "";
+  const provided = header.startsWith("Bearer ") ? header.slice(7) : ctx.get("x-admin-token") || "";
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) ctx.throw(401, "unauthorized");
   await next();
 }
 

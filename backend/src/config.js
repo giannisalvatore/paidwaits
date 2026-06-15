@@ -14,7 +14,15 @@ export const config = {
   // Resend (vuoto = fallback dev: le email vengono loggate in console).
   resendApiKey: process.env.RESEND_API_KEY || "",
   mailFrom: process.env.MAIL_FROM || "WaitingAds <onboarding@resend.dev>",
+  // Token per gli endpoint /admin/* (fail-closed: vuoto = admin disabilitato).
+  adminToken: process.env.ADMIN_TOKEN || "",
 };
+
+// Guardrail produzione: rifiuta l'avvio se il secret di sessione è ancora quello di default.
+const WEAK_SESSION_KEYS = new Set(["dev-only-change-me", "change-me", ""]);
+if (config.isProduction && config.sessionKeys.every((k) => WEAK_SESSION_KEYS.has((k || "").trim()))) {
+  throw new Error("SESSION_KEYS deve essere un secret forte in produzione (non il default).");
+}
 
 // Economia della piattaforma (vedi ANALISI.md §5–6)
 export const economics = {
